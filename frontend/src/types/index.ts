@@ -38,11 +38,13 @@ export interface HeyGenVideo {
 
 export interface NovaSocialContent {
   id: string; episode_id: string; script_id: string | null; show_name: string
-  episode_title: string; hook: string; caption: string; hashtags: string[]
-  cta: string; tiktok_copy: string; instagram_copy: string
+  episode_title: string; hook: string; hook_alternate: string; caption: string
+  hashtags: string[]; cta: string; tiktok_copy: string; instagram_copy: string
   youtube_description: string; linkedin_copy: string; twitter_copy: string
-  pinterest_copy: string; thumbnail_prompt: string; thumbnail_url: string
-  social_card_url: string
+  pinterest_copy: string; reddit_copy: string
+  thumbnail_prompt: string; thumbnail_url: string; fal_raw_url: string
+  social_card_url: string; canva_design_url: string; canva_design_id: string
+  seo_keywords: string[]
   status: 'pending' | 'generating' | 'complete' | 'failed'
   error_msg?: string; created_at: string
 }
