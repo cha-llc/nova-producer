@@ -150,6 +150,7 @@ export default function Episodes() {
   const generating = episodes.filter(e => e.status === 'generating').length
 
   return (
+    <>
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
