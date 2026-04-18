@@ -74,6 +74,7 @@ export default function Episodes() {
           setEpisodes(p => p.filter(e => e.id !== (payload.old as AiEpisode).id))
       }).subscribe()
     return () => { supabase.removeChannel(ch) }
+    <>
   }, [])
 
   // Stop a generating episode
@@ -311,5 +312,6 @@ export default function Episodes() {
         onScheduled={() => { setScheduleEp(null); load() }}
       />
     )}
+    </>
   )
 }
