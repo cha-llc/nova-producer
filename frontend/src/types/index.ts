@@ -6,6 +6,7 @@ export type ShowName =
 
 export type ScriptStatus = 'draft' | 'ready' | 'processing' | 'done' | 'failed'
 export type EpisodeStatus = 'generating' | 'complete' | 'failed'
+export type EpisodeSource = 'nova' | 'heygen_studio'
 
 export interface ShowConfig {
   id: string
@@ -13,10 +14,10 @@ export interface ShowConfig {
   display_name: string
   description: string
   color: string
-  voice_id: string          // ElevenLabs voice ID (Mode B — fallback)
-  avatar_id: string         // HeyGen avatar ID
-  heygen_voice_id: string   // HeyGen cloned voice ID (Mode A — preferred)
-  background_url: string    // Custom branded background image URL (overrides show color)
+  voice_id: string
+  avatar_id: string
+  heygen_voice_id: string
+  background_url: string
   day_of_week: string
   created_at: string
 }
@@ -33,15 +34,29 @@ export interface ShowScript {
 
 export interface AiEpisode {
   id: string
-  script_id: string
+  script_id: string | null
   show_name: string
   audio_url: string
   heygen_video_url: string
+  heygen_thumbnail_url: string
+  heygen_title: string
+  heygen_duration: string
   storage_url: string
   status: EpisodeStatus
+  source: EpisodeSource
   error_msg?: string
   created_at: string
   script?: ShowScript
+}
+
+export interface HeyGenVideo {
+  video_id: string
+  title: string
+  status: string
+  video_url: string
+  thumbnail_url: string
+  duration: string
+  created_at: number
 }
 
 export interface ProducePayload {
