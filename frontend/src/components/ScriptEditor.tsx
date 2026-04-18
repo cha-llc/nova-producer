@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, Send, Save, Settings, Mic } from 'lucide-react'
+import { Loader2, Send, Save, Settings } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ShowConfig, ShowScript } from '../types'
 
@@ -21,21 +21,19 @@ export default function ScriptEditor({ shows, onSaved }: Props) {
   const wordCount = scriptText.trim() ? scriptText.trim().split(/\s+/).length : 0
   const show      = shows.find(s => s.id === selectedShow)
 
-  // Voice config — prefer HeyGen, fall back to ElevenLabs
-  const hasHeyGenVoice  = Boolean(show?.heygen_voice_id?.trim())
-  const hasElevenLabs   = Boolean(show?.voice_id?.trim())
-  const hasAvatar       = Boolean(show?.avatar_id?.trim())
-  const hasAnyVoice     = hasHeyGenVoice || hasElevenLabs
-  const readyToProduce  = hasAnyVoice && hasAvatar
+  // Only the avatar ID is required — Mode C covers Instant Avatars with no voice ID
+  const hasAvatar = Boolean(show?.avatar_id?.trim())
+  const readyToProduce = hasAvatar
 
-  // Voice status label
-  const voiceLabel = hasHeyGenVoice
-    ? `HeyGen · ${show!.heygen_voice_id.slice(0, 10)}…`
-    : hasElevenLabs
-    ? `ElevenLabs · ${show!.voice_id.slice(0, 10)}…`
-    : null
-
-  const voiceMode = hasHeyGenVoice ? 'A' : hasElevenLabs ? 'B' : null
+  // Determine active mode for display
+  const mode = show?.heygen_voice_id?.trim() ? 'A'
+             : show?.voice_id?.trim()        ? 'B'
+             : hasAvatar                     ? 'C'
+             : null
+  const modeLabel = mode === 'A' ? 'Mode A — HeyGen voice'
+                  : mode === 'B' ? 'Mode B — ElevenLabs'
+                  : mode === 'C' ? 'Mode C — Instant Avatar (your voice built-in)'
+                  : null
 
   async function handleSave(asDraft: boolean) {
     if (!selectedShow || !scriptText.trim()) {
@@ -43,7 +41,7 @@ export default function ScriptEditor({ shows, onSaved }: Props) {
       return
     }
     if (!asDraft && !readyToProduce) {
-      setMsg('Voice and avatar must be configured in Settings first.')
+      setMsg('Paste your HeyGen Avatar ID in Settings first.')
       return
     }
     setStatus(asDraft ? 'saving' : 'queuing')
@@ -69,7 +67,7 @@ export default function ScriptEditor({ shows, onSaved }: Props) {
     setStatus('done')
     setMsg(asDraft
       ? '✓ Saved as draft.'
-      : '✅ Script queued — NOVA is producing your episode. Check #nova in Slack.')
+      : '✅ Queued — NOVA is producing your episode. Check #deployments in Slack.')
     onSaved?.(data as ShowScript)
     if (!asDraft) {
       setScriptText('')
@@ -95,13 +93,13 @@ export default function ScriptEditor({ shows, onSaved }: Props) {
         </select>
       </div>
 
-      {/* Script text */}
+      {/* Script */}
       <div>
         <label className="block text-xs font-mono text-nova-muted mb-1.5 uppercase tracking-widest">Script</label>
         <textarea
           value={scriptText}
           onChange={e => setScriptText(e.target.value)}
-          placeholder="Paste or type your full show script here. NOVA will read it in your voice…"
+          placeholder="Paste or type your full show script…"
           rows={12}
           className="nova-input resize-y font-body text-sm leading-relaxed"
         />
@@ -118,63 +116,40 @@ export default function ScriptEditor({ shows, onSaved }: Props) {
         <textarea
           value={caption}
           onChange={e => setCaption(e.target.value)}
-          placeholder="Caption for TikTok, IG, YouTube, Pinterest, Reddit…"
+          placeholder="Caption for TikTok, IG, YouTube, Pinterest…"
           rows={3}
           className="nova-input resize-none text-sm"
         />
       </div>
 
-      {/* Voice / Avatar status */}
+      {/* Config status */}
       {show && (
         <div className="p-3 bg-nova-navydark/60 rounded-lg border border-nova-border/50 space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Mic size={12} className={hasAnyVoice ? 'text-nova-teal' : 'text-nova-crimson'} />
-              <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Voice</span>
-            </div>
-            {hasAnyVoice ? (
-              <div className="flex items-center gap-2">
-                <span className={`nova-badge ${voiceMode === 'A' ? 'bg-nova-teal/20 text-nova-teal' : 'bg-nova-border/60 text-nova-muted'}`}>
-                  Mode {voiceMode}
-                </span>
-                <span className="text-xs font-mono text-white/60">{voiceLabel}</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => navigate('/settings')}
-                className="flex items-center gap-1.5 text-xs font-mono text-nova-crimson hover:text-white transition-colors"
-              >
-                <Settings size={11} />
-                Not configured — go to Settings
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${hasAvatar ? 'bg-nova-violet' : 'bg-nova-crimson'}`} />
-              <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Avatar</span>
-            </div>
+            <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Avatar</span>
             {hasAvatar ? (
-              <span className="text-xs font-mono text-white/60">{show.avatar_id.slice(0, 12)}…</span>
+              <span className="text-xs font-mono text-white/60">{show.avatar_id.slice(0, 14)}…</span>
             ) : (
-              <button
-                onClick={() => navigate('/settings')}
-                className="flex items-center gap-1.5 text-xs font-mono text-nova-crimson hover:text-white transition-colors"
-              >
-                <Settings size={11} />
-                Not configured — go to Settings
+              <button onClick={() => navigate('/settings')}
+                className="flex items-center gap-1.5 text-xs font-mono text-nova-crimson hover:text-white transition-colors">
+                <Settings size={11} /> Not configured — go to Settings
               </button>
             )}
           </div>
+          {modeLabel && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Voice mode</span>
+              <span className={`nova-badge ${mode === 'C' || mode === 'A' ? 'bg-nova-teal/20 text-nova-teal' : 'bg-nova-border/60 text-nova-muted'}`}>
+                {modeLabel}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
       {/* Feedback */}
       {msg && (
-        <p className={`text-sm font-body ${status === 'error' ? 'text-nova-crimson' : 'text-nova-teal'}`}>
-          {msg}
-        </p>
+        <p className={`text-sm font-body ${status === 'error' ? 'text-nova-crimson' : 'text-nova-teal'}`}>{msg}</p>
       )}
 
       {/* Actions */}
@@ -189,13 +164,9 @@ export default function ScriptEditor({ shows, onSaved }: Props) {
         </button>
 
         {show && !readyToProduce ? (
-          <button
-            onClick={() => navigate('/settings')}
-            className="nova-btn-primary flex items-center gap-2 opacity-60"
-            title="Voice and avatar must be configured in Settings"
-          >
-            <Settings size={14} />
-            Configure in Settings first
+          <button onClick={() => navigate('/settings')}
+            className="nova-btn-primary flex items-center gap-2 opacity-60">
+            <Settings size={14} /> Add Avatar ID in Settings
           </button>
         ) : (
           <button
