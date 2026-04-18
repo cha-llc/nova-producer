@@ -1,9 +1,14 @@
-import { Video, ExternalLink, Clock, CheckCircle, AlertCircle, Loader2, Import } from 'lucide-react'
+import { useState } from 'react'
+import {
+  Video, ExternalLink, Clock, CheckCircle, AlertCircle,
+  Loader2, Import, Square, Trash2, AlertTriangle
+} from 'lucide-react'
 import type { AiEpisode } from '../types'
 
 interface Props {
   episode: AiEpisode
-  onImport?: () => void
+  onStop?: (episode: AiEpisode) => Promise<void>
+  onDelete?: (episode: AiEpisode) => Promise<void>
 }
 
 const showColors: Record<string, string> = {
@@ -13,16 +18,42 @@ const showColors: Record<string, string> = {
   confession_court:   '#C1121F',
 }
 
-export default function EpisodeCard({ episode, onImport }: Props) {
-  const color      = showColors[episode.show_name] ?? '#C9A84C'
-  const date       = new Date(episode.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  const showLabel  = episode.show_name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-  const videoUrl   = episode.storage_url || episode.heygen_video_url
-  const thumbUrl   = episode.heygen_thumbnail_url
-  const isStudio   = episode.source === 'heygen_studio'
+export default function EpisodeCard({ episode, onStop, onDelete }: Props) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [stopping, setStopping]   = useState(false)
+  const [deleting, setDeleting]   = useState(false)
+  const [actionErr, setActionErr] = useState('')
+
+  const color     = showColors[episode.show_name] ?? '#C9A84C'
+  const date      = new Date(episode.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const showLabel = episode.show_name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  const videoUrl  = episode.storage_url || episode.heygen_video_url
+  const thumbUrl  = episode.heygen_thumbnail_url
+  const isStudio  = episode.source === 'heygen_studio'
+
+  async function handleStop() {
+    if (!onStop) return
+    setStopping(true)
+    setActionErr('')
+    try { await onStop(episode) }
+    catch (e: unknown) { setActionErr(e instanceof Error ? e.message : 'Stop failed') }
+    setStopping(false)
+  }
+
+  async function handleDelete() {
+    if (!onDelete) return
+    setDeleting(true)
+    setActionErr('')
+    try { await onDelete(episode) }
+    catch (e: unknown) {
+      setActionErr(e instanceof Error ? e.message : 'Delete failed')
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
 
   return (
-    <div className="nova-card hover:border-nova-border transition-colors group animate-slide-up">
+    <div className="nova-card group animate-slide-up relative">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
@@ -44,19 +75,14 @@ export default function EpisodeCard({ episode, onImport }: Props) {
         </div>
       </div>
 
-      {/* Thumbnail / status area */}
-      <div
-        className="w-full h-32 rounded-lg mb-3 overflow-hidden relative flex items-center justify-center"
-        style={{ backgroundColor: `${color}10`, border: `1px solid ${color}22` }}
-      >
-        {thumbUrl ? (
-          <img src={thumbUrl} alt="Episode thumbnail"
-            className="w-full h-full object-cover" />
-        ) : null}
+      {/* Thumbnail / status */}
+      <div className="w-full h-32 rounded-lg mb-3 overflow-hidden relative flex items-center justify-center"
+        style={{ backgroundColor: `${color}10`, border: `1px solid ${color}22` }}>
+        {thumbUrl && <img src={thumbUrl} alt="thumbnail" className="w-full h-full object-cover" />}
 
         {episode.status === 'complete' && videoUrl ? (
           <a href={videoUrl} target="_blank" rel="noreferrer"
-            className={`${thumbUrl ? 'absolute inset-0 bg-black/40' : ''} flex flex-col items-center justify-center gap-1 group/play`}>
+            className={`${thumbUrl ? 'absolute inset-0 bg-black/40' : ''} flex flex-col items-center justify-center gap-1`}>
             <div className="w-10 h-10 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-sm">
               <Video size={18} style={{ color }} />
             </div>
@@ -75,17 +101,15 @@ export default function EpisodeCard({ episode, onImport }: Props) {
         ) : null}
       </div>
 
-      {/* Title (for Studio imports) */}
+      {/* Title */}
       {episode.heygen_title && (
         <p className="text-xs font-body text-white/80 mb-2 line-clamp-1">{episode.heygen_title}</p>
       )}
 
-      {/* Meta row */}
-      <div className="flex items-center gap-2 text-xs font-mono text-nova-muted flex-wrap">
+      {/* Meta */}
+      <div className="flex items-center gap-2 text-xs font-mono text-nova-muted flex-wrap mb-2">
         <span className="flex items-center gap-1"><Clock size={11} /> {date}</span>
-        {episode.heygen_duration && (
-          <span className="text-nova-muted/60">{episode.heygen_duration}s</span>
-        )}
+        {episode.heygen_duration && <span className="text-nova-muted/60">{episode.heygen_duration}s</span>}
         {episode.heygen_video_url && (
           <a href={episode.heygen_video_url} target="_blank" rel="noreferrer"
             className="flex items-center gap-1 hover:text-nova-gold transition-colors ml-auto">
@@ -94,18 +118,61 @@ export default function EpisodeCard({ episode, onImport }: Props) {
         )}
       </div>
 
-      {/* Error */}
+      {/* Error msg */}
       {episode.error_msg && (
-        <p className="mt-2 text-xs font-mono text-nova-crimson bg-nova-crimson/10 rounded p-2 line-clamp-3">
+        <p className="text-xs font-mono text-nova-crimson bg-nova-crimson/10 rounded p-2 line-clamp-2 mb-2">
           {episode.error_msg}
         </p>
+      )}
+
+      {/* Action error */}
+      {actionErr && (
+        <p className="text-xs font-mono text-nova-crimson bg-nova-crimson/10 rounded px-2 py-1 mb-2">
+          {actionErr}
+        </p>
+      )}
+
+      {/* Delete confirmation overlay */}
+      {confirmDelete ? (
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-nova-crimson/10 border border-nova-crimson/30">
+          <AlertTriangle size={13} className="text-nova-crimson shrink-0" />
+          <span className="text-xs font-mono text-nova-crimson flex-1">Delete this episode?</span>
+          <button onClick={handleDelete} disabled={deleting}
+            className="text-xs font-mono bg-nova-crimson text-white px-2 py-0.5 rounded hover:bg-nova-crimson/80 disabled:opacity-50 flex items-center gap-1">
+            {deleting ? <Loader2 size={10} className="animate-spin" /> : null}
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+          <button onClick={() => setConfirmDelete(false)} disabled={deleting}
+            className="text-xs font-mono text-nova-muted hover:text-white px-2 py-0.5 rounded border border-nova-border">
+            Cancel
+          </button>
+        </div>
+      ) : (
+        /* Action buttons row */
+        <div className="flex items-center gap-2">
+          {episode.status === 'generating' && onStop && (
+            <button onClick={handleStop} disabled={stopping}
+              className="flex items-center gap-1 text-xs font-mono text-nova-gold border border-nova-gold/30 px-2 py-1 rounded hover:bg-nova-gold/10 transition-all disabled:opacity-40">
+              {stopping
+                ? <><Loader2 size={11} className="animate-spin" /> Stopping…</>
+                : <><Square size={11} className="fill-nova-gold" /> Stop</>
+              }
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1 text-xs font-mono text-nova-muted border border-nova-border px-2 py-1 rounded hover:border-nova-crimson/40 hover:text-nova-crimson transition-all ml-auto">
+              <Trash2 size={11} /> Delete
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
 }
 
 
-// HeyGen Library card — for unimported HeyGen videos
+// HeyGen Library card (for unimported HeyGen Studio videos)
 interface LibraryCardProps {
   video: {
     video_id: string; title: string; status: string
@@ -117,10 +184,10 @@ interface LibraryCardProps {
 }
 
 const SHOWS_LIST = [
-  { key: 'sunday_power_hour',  label: 'Sunday Power Hour' },
-  { key: 'motivation_court',   label: 'Motivation Court' },
-  { key: 'tea_time_with_cj',   label: 'Tea Time with CJ' },
-  { key: 'confession_court',   label: 'Confession Court' },
+  { key: 'sunday_power_hour', label: 'Sunday Power Hour' },
+  { key: 'motivation_court',  label: 'Motivation Court' },
+  { key: 'tea_time_with_cj',  label: 'Tea Time with CJ' },
+  { key: 'confession_court',  label: 'Confession Court' },
 ]
 
 export function HeyGenLibraryCard({ video, importing, onImport }: LibraryCardProps) {
@@ -130,7 +197,6 @@ export function HeyGenLibraryCard({ video, importing, onImport }: LibraryCardPro
 
   return (
     <div className="nova-card space-y-3 animate-slide-up">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-nova-violet/15 text-nova-violet">
           HeyGen Studio
@@ -141,21 +207,16 @@ export function HeyGenLibraryCard({ video, importing, onImport }: LibraryCardPro
         }`}>{video.status}</span>
       </div>
 
-      {/* Thumbnail */}
       <div className="w-full h-32 rounded-lg overflow-hidden bg-nova-navydark/60 border border-nova-border/40 flex items-center justify-center">
-        {video.thumbnail_url ? (
-          <img src={video.thumbnail_url} alt="HeyGen thumbnail" className="w-full h-full object-cover" />
-        ) : (
-          <Video size={24} className="text-nova-muted" />
-        )}
+        {video.thumbnail_url
+          ? <img src={video.thumbnail_url} alt="HeyGen thumbnail" className="w-full h-full object-cover" />
+          : <Video size={24} className="text-nova-muted" />}
       </div>
 
-      {/* Title + date */}
       {video.title && <p className="text-xs font-body text-white/80 line-clamp-2">{video.title}</p>}
       {date && <p className="text-xs font-mono text-nova-muted flex items-center gap-1"><Clock size={11} />{date}</p>}
 
-      {/* Import */}
-      {video.status === 'completed' && (
+      {video.status === 'completed' ? (
         <div className="space-y-2">
           <p className="text-xs font-mono text-nova-muted uppercase tracking-widest">Import to show</p>
           <div className="grid grid-cols-2 gap-1.5">
@@ -168,9 +229,7 @@ export function HeyGenLibraryCard({ video, importing, onImport }: LibraryCardPro
             ))}
           </div>
         </div>
-      )}
-
-      {video.status !== 'completed' && (
+      ) : (
         <p className="text-xs font-mono text-nova-muted">Video must be completed to import.</p>
       )}
     </div>
