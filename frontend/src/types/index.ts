@@ -5,7 +5,7 @@ export type ShowName =
   | 'confession_court'
 
 export type ScriptStatus = 'draft' | 'ready' | 'processing' | 'done' | 'failed'
-export type EpisodeStatus = 'generating' | 'complete' | 'failed'
+export type EpisodeStatus = 'generating' | 'processing' | 'complete' | 'failed' | 'cancelled'
 export type EpisodeSource = 'nova' | 'heygen_studio'
 
 export interface ShowConfig {
