@@ -4,19 +4,16 @@ const BUDGET_MANAGER = 'https://cha-budget-manager.vercel.app'
 const SUPABASE_URL   = 'https://vzzzqsmqqaoilkmskadl.supabase.co'
 const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6enpxc21xcWFvaWxrbXNrYWRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NjYzMjQsImV4cCI6MjA5MTQ0MjMyNH0.vYkiz5BeoJlhNzcEiiGQfsHLE5UfqJbTTBjNXk1xxJs'
 const STORAGE_KEY    = 'cha_nova_token'
-const APP_NAME       = 'nova'
 
 async function validateToken(token: string): Promise<boolean> {
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/app_access_tokens?token=eq.${token}&app=eq.${APP_NAME}&select=id`,
+      `${SUPABASE_URL}/rest/v1/app_access_tokens?token=eq.${token}&select=id`,
       { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` } }
     )
     const rows = await res.json()
     return Array.isArray(rows) && rows.length > 0
-  } catch {
-    return false
-  }
+  } catch { return false }
 }
 
 interface Props { children: ReactNode }
@@ -34,22 +31,15 @@ export default function AuthGuard({ children }: Props) {
         if (valid) {
           localStorage.setItem(STORAGE_KEY, urlToken)
           params.delete('access_token')
-          const clean = params.toString()
-          window.history.replaceState({}, '', clean ? `?${clean}` : window.location.pathname)
+          window.history.replaceState({}, '', params.toString() ? `?${params}` : window.location.pathname)
           setState('allowed')
           return
         }
       }
 
       const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const valid = await validateToken(stored)
-        if (valid) {
-          setState('allowed')
-          return
-        }
-        localStorage.removeItem(STORAGE_KEY)
-      }
+      if (stored && await validateToken(stored)) { setState('allowed'); return }
+      localStorage.removeItem(STORAGE_KEY)
 
       setState('denied')
       window.location.href = `${BUDGET_MANAGER}/login?redirect=nova`
@@ -66,6 +56,5 @@ export default function AuthGuard({ children }: Props) {
   )
 
   if (state === 'denied') return null
-
   return <Fragment>{children}</Fragment>
 }
