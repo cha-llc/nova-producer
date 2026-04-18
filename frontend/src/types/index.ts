@@ -16,10 +16,9 @@ export interface ShowConfig {
   voice_id: string          // ElevenLabs voice ID (Mode B — fallback)
   avatar_id: string         // HeyGen avatar ID
   heygen_voice_id: string   // HeyGen cloned voice ID (Mode A — preferred)
-  background_url: string    // Branded background image URL (optional)
+  background_url: string    // Custom branded background image URL (overrides show color)
   day_of_week: string
   created_at: string
-  show?: ShowConfig
 }
 
 export interface ShowScript {
@@ -51,6 +50,6 @@ export interface ProducePayload {
   voice_id: string
   avatar_id: string
   heygen_voice_id: string
-  background_url: string
   show_color: string
+  background_url: string
 }
