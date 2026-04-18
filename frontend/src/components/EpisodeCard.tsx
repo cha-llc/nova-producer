@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Video, ExternalLink, Clock, CheckCircle, AlertCircle,
   Loader2, Import, Square, Trash2, AlertTriangle,
-  CalendarPlus, Pencil, Check, X, RotateCcw, Brain, Image
+  CalendarPlus, Pencil, Check, X, RotateCcw, Brain, ImageIcon, Palette
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AiEpisode } from '../types'
@@ -11,13 +11,13 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
 interface Props {
   episode: AiEpisode
-  onStop?:       (episode: AiEpisode) => Promise<void>
-  onDelete?:     (episode: AiEpisode) => Promise<void>
-  onSchedule?:   (episode: AiEpisode) => void
-  onRegenerate?: (episode: AiEpisode) => void
+  onStop?:       (ep: AiEpisode) => Promise<void>
+  onDelete?:     (ep: AiEpisode) => Promise<void>
+  onSchedule?:   (ep: AiEpisode) => void
+  onRegenerate?: (ep: AiEpisode) => void
 }
 
-const showColors: Record<string, string> = {
+const SHOW_COLORS: Record<string, string> = {
   sunday_power_hour: '#C9A84C',
   motivation_court:  '#2A9D8F',
   tea_time_with_cj:  '#9B5DE5',
@@ -30,13 +30,13 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
   const [deleting,      setDeleting]      = useState(false)
   const [regenerating,  setRegenerating]  = useState(false)
   const [genContent,    setGenContent]    = useState(false)
+  const [genImage,      setGenImage]      = useState(false)
   const [actionErr,     setActionErr]     = useState('')
+  const [renaming,      setRenaming]      = useState(false)
+  const [nameVal,       setNameVal]       = useState(episode.episode_title || episode.heygen_title || '')
+  const [nameSaving,    setNameSaving]    = useState(false)
 
-  const [renaming,   setRenaming]   = useState(false)
-  const [nameVal,    setNameVal]    = useState(episode.episode_title || episode.heygen_title || '')
-  const [nameSaving, setNameSaving] = useState(false)
-
-  const color     = showColors[episode.show_name] ?? '#C9A84C'
+  const color     = SHOW_COLORS[episode.show_name] ?? '#C9A84C'
   const date      = new Date(episode.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   const showLabel = episode.show_name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   const videoUrl  = episode.storage_url || episode.heygen_video_url
@@ -58,7 +58,10 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
     if (!onDelete) return
     setDeleting(true); setActionErr('')
     try { await onDelete(episode) }
-    catch (e: unknown) { setActionErr(e instanceof Error ? e.message : 'Delete failed'); setDeleting(false); setConfirmDelete(false) }
+    catch (e: unknown) {
+      setActionErr(e instanceof Error ? e.message : 'Delete failed')
+      setDeleting(false); setConfirmDelete(false)
+    }
   }
 
   async function saveRename() {
@@ -66,18 +69,15 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
     if (!trimmed) { setRenaming(false); return }
     setNameSaving(true)
     await supabase.from('ai_episodes').update({ episode_title: trimmed, heygen_title: trimmed }).eq('id', episode.id)
-    episode.episode_title = trimmed
-    episode.heygen_title = trimmed
-    setNameSaving(false)
-    setRenaming(false)
+    episode.episode_title = trimmed; episode.heygen_title = trimmed
+    setNameSaving(false); setRenaming(false)
   }
 
   async function handleRegenerate() {
     setRegenerating(true); setActionErr('')
     try {
       const r = await fetch(`${SUPABASE_URL}/functions/v1/regenerate-episode`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ episode_id: episode.id }),
       })
       const d = await r.json()
@@ -94,21 +94,38 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
     setGenContent(true); setActionErr('')
     try {
       const r = await fetch(`${SUPABASE_URL}/functions/v1/nova-brain`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          episode_id: episode.id,
-          script_id:  episode.script_id,
-          show_name:  episode.show_name,
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episode_id: episode.id, script_id: episode.script_id, show_name: episode.show_name }),
       })
       const d = await r.json()
-      if (!d.success) throw new Error(d.action_required || d.error || 'Content generation failed')
+      if (!d.success) throw new Error(d.action_required || d.error || 'Content gen failed')
       episode.social_content_id = d.social_content_id
     } catch (e: unknown) {
       setActionErr(e instanceof Error ? e.message : 'Content gen failed')
     }
     setGenContent(false)
+  }
+
+  async function handleGenerateImage() {
+    setGenImage(true); setActionErr('')
+    try {
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/nova-image`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episode_id: episode.id, show_name: episode.show_name,
+          prompt: `Cinematic visual for ${episode.show_name.replace(/_/g,' ')} podcast episode. Dark dramatic.`,
+          asset_type: 'thumbnail',
+        }),
+      })
+      const d = await r.json()
+      if (!d.success && !d.skipped) throw new Error(d.error || 'Image gen failed')
+      if (d.storage_url) {
+        episode.thumbnail_url = d.storage_url
+      }
+    } catch (e: unknown) {
+      setActionErr(e instanceof Error ? e.message : 'Image gen failed')
+    }
+    setGenImage(false)
   }
 
   return (
@@ -120,19 +137,13 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
             style={{ backgroundColor: `${color}18`, color }}>
             {showLabel}
           </span>
-          {isStudio && (
-            <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-nova-violet/15 text-nova-violet">Studio</span>
-          )}
-          {hasContent && (
-            <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-nova-teal/15 text-nova-teal flex items-center gap-1">
-              <Brain size={9} /> AI
-            </span>
-          )}
+          {isStudio && <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-nova-violet/15 text-nova-violet">Studio</span>}
+          {hasContent && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-nova-teal/15 text-nova-teal flex items-center gap-1"><Brain size={9} /> AI</span>}
         </div>
         <div className="flex items-center gap-1.5">
-          {episode.status === 'complete'   && <CheckCircle size={13} className="text-green-400" />}
+          {episode.status === 'complete'                             && <CheckCircle size={13} className="text-green-400" />}
           {(episode.status === 'generating' || episode.status === 'processing') && <Loader2 size={13} className="animate-spin text-nova-gold" />}
-          {episode.status === 'failed'     && <AlertCircle size={13} className="text-nova-crimson" />}
+          {episode.status === 'failed'                              && <AlertCircle size={13} className="text-nova-crimson" />}
           <span className="text-xs font-mono capitalize text-nova-muted">{episode.status}</span>
         </div>
       </div>
@@ -147,12 +158,11 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
             <div className="w-10 h-10 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-sm">
               <Video size={18} style={{ color }} />
             </div>
-            {!thumbUrl && <span className="text-xs font-mono" style={{ color }}>Play Episode</span>}
           </a>
         ) : (episode.status === 'generating' || episode.status === 'processing') ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
             <Loader2 size={22} className="animate-spin" style={{ color }} />
-            <span className="text-xs font-mono text-white/70">NOVA is producing...</span>
+            <span className="text-xs font-mono text-white/70">Producing...</span>
           </div>
         ) : episode.status === 'failed' ? (
           <div className="flex flex-col items-center gap-1">
@@ -162,15 +172,14 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
         ) : null}
       </div>
 
-      {/* Title inline editable */}
+      {/* Title */}
       <div className="mb-2">
         {renaming ? (
           <div className="flex items-center gap-1.5">
             <input autoFocus value={nameVal}
               onChange={e => setNameVal(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') setRenaming(false) }}
-              className="nova-input flex-1 text-xs py-1 font-body"
-              placeholder="Episode name..." />
+              className="nova-input flex-1 text-xs py-1" />
             <button onClick={saveRename} disabled={nameSaving}
               className="text-green-400 hover:text-green-300 p-1 disabled:opacity-40">
               {nameSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
@@ -183,10 +192,10 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
         ) : (
           <div className="flex items-center gap-1.5 group/title">
             <p className="text-xs font-body text-white/80 line-clamp-1 flex-1 min-w-0">
-              {displayTitle || <span className="text-nova-muted/50 italic">Untitled episode</span>}
+              {displayTitle || <span className="text-nova-muted/50 italic">Untitled</span>}
             </p>
             <button onClick={() => { setNameVal(displayTitle); setRenaming(true) }}
-              className="opacity-0 group-hover/title:opacity-100 text-nova-muted hover:text-nova-gold transition-all p-0.5 shrink-0">
+              className="opacity-0 group-hover/title:opacity-100 text-nova-muted hover:text-nova-gold transition-all p-0.5">
               <Pencil size={11} />
             </button>
           </div>
@@ -196,7 +205,7 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
       {/* Meta */}
       <div className="flex items-center gap-2 text-xs font-mono text-nova-muted flex-wrap mb-2">
         <span className="flex items-center gap-1"><Clock size={11} /> {date}</span>
-        {episode.heygen_duration && <span className="text-nova-muted/60">{episode.heygen_duration}s</span>}
+        {episode.heygen_duration && <span>{episode.heygen_duration}s</span>}
         {episode.heygen_video_url && (
           <a href={episode.heygen_video_url} target="_blank" rel="noreferrer"
             className="flex items-center gap-1 hover:text-nova-gold transition-colors ml-auto">
@@ -205,22 +214,17 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
         )}
       </div>
 
-      {episode.error_msg && (
+      {(episode.error_msg || actionErr) && (
         <p className="text-xs font-mono text-nova-crimson bg-nova-crimson/10 rounded p-2 line-clamp-2 mb-2">
-          {episode.error_msg}
+          {actionErr || episode.error_msg}
         </p>
       )}
 
-      {actionErr && (
-        <p className="text-xs font-mono text-nova-crimson bg-nova-crimson/10 rounded px-2 py-1 mb-2">
-          {actionErr}
-        </p>
-      )}
-
+      {/* Actions */}
       {confirmDelete ? (
         <div className="flex items-center gap-2 p-2 rounded-lg bg-nova-crimson/10 border border-nova-crimson/30">
           <AlertTriangle size={13} className="text-nova-crimson shrink-0" />
-          <span className="text-xs font-mono text-nova-crimson flex-1">Delete this episode?</span>
+          <span className="text-xs font-mono text-nova-crimson flex-1">Delete?</span>
           <button onClick={handleDelete} disabled={deleting}
             className="text-xs font-mono bg-nova-crimson text-white px-2 py-0.5 rounded hover:bg-nova-crimson/80 disabled:opacity-50 flex items-center gap-1">
             {deleting ? <Loader2 size={10} className="animate-spin" /> : null}
@@ -239,51 +243,30 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
               <CalendarPlus size={11} /> Schedule
             </button>
           )}
-
           {episode.status === 'complete' && episode.script_id && (
             <button onClick={handleGenerateContent} disabled={genContent}
               className="flex items-center gap-1 text-xs font-mono text-nova-muted border border-nova-border/50 px-2 py-1 rounded hover:text-nova-violet hover:border-nova-violet/40 transition-all disabled:opacity-40">
-              {genContent
-                ? <><Loader2 size={11} className="animate-spin" /> Generating...</>
-                : hasContent
-                  ? <><Brain size={11} /> Regen AI</>
-                  : <><Brain size={11} /> Gen Content</>}
+              {genContent ? <><Loader2 size={11} className="animate-spin" /> Gen...</> : <><Brain size={11} /> {hasContent ? 'Regen AI' : 'Gen AI'}</>}
             </button>
           )}
-
-          {episode.status === 'complete' && !episode.thumbnail_url && episode.social_content_id && (
-            <button onClick={async () => {
-              setGenContent(true)
-              await fetch(`${SUPABASE_URL}/functions/v1/nova-image`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ episode_id: episode.id, show_name: episode.show_name, prompt: `Cinematic visual for ${episode.episode_title || episode.show_name}`, asset_type: 'thumbnail' }),
-              })
-              setGenContent(false)
-            }} disabled={genContent}
+          {episode.status === 'complete' && (
+            <button onClick={handleGenerateImage} disabled={genImage}
               className="flex items-center gap-1 text-xs font-mono text-nova-muted border border-nova-border/50 px-2 py-1 rounded hover:text-nova-gold hover:border-nova-gold/40 transition-all disabled:opacity-40">
-              <Image size={11} /> Thumbnail
+              {genImage ? <><Loader2 size={11} className="animate-spin" /> Gen...</> : <><ImageIcon size={11} /> Image</>}
             </button>
           )}
-
           {canRegen && (
             <button onClick={handleRegenerate} disabled={regenerating}
               className="flex items-center gap-1 text-xs font-mono text-nova-muted border border-nova-border/50 px-2 py-1 rounded hover:text-nova-violet hover:border-nova-violet/40 transition-all disabled:opacity-40">
-              {regenerating
-                ? <><Loader2 size={11} className="animate-spin" /> Queuing...</>
-                : <><RotateCcw size={11} /> Regenerate</>}
+              {regenerating ? <><Loader2 size={11} className="animate-spin" /> Queue...</> : <><RotateCcw size={11} /> Regen</>}
             </button>
           )}
-
           {episode.status === 'generating' && onStop && (
             <button onClick={handleStop} disabled={stopping}
               className="flex items-center gap-1 text-xs font-mono text-nova-gold border border-nova-gold/30 px-2 py-1 rounded hover:bg-nova-gold/10 transition-all disabled:opacity-40">
-              {stopping
-                ? <><Loader2 size={11} className="animate-spin" /> Stopping...</>
-                : <><Square size={11} className="fill-nova-gold" /> Stop</>}
+              {stopping ? <><Loader2 size={11} className="animate-spin" /> Stop...</> : <><Square size={11} className="fill-nova-gold" /> Stop</>}
             </button>
           )}
-
           {onDelete && (
             <button onClick={() => setConfirmDelete(true)}
               className="flex items-center gap-1 text-xs font-mono text-nova-muted border border-nova-border px-2 py-1 rounded hover:border-nova-crimson/40 hover:text-nova-crimson transition-all ml-auto">
@@ -295,7 +278,6 @@ export default function EpisodeCard({ episode, onStop, onDelete, onSchedule, onR
     </div>
   )
 }
-
 
 // HeyGen Library card
 interface LibraryCardProps {
@@ -319,7 +301,9 @@ export function HeyGenLibraryCard({ video, importing, onImport }: LibraryCardPro
     <div className="nova-card space-y-3 animate-slide-up">
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-nova-violet/15 text-nova-violet">HeyGen Studio</span>
-        <span className={`text-xs font-mono capitalize ${video.status === 'completed' ? 'text-green-400' : video.status === 'failed' ? 'text-nova-crimson' : 'text-nova-gold'}`}>{video.status}</span>
+        <span className={`text-xs font-mono capitalize ${video.status === 'completed' ? 'text-green-400' : video.status === 'failed' ? 'text-nova-crimson' : 'text-nova-gold'}`}>
+          {video.status}
+        </span>
       </div>
       <div className="w-full h-32 rounded-lg overflow-hidden bg-nova-navydark/60 border border-nova-border/40 flex items-center justify-center">
         {video.thumbnail_url ? <img src={video.thumbnail_url} alt="thumbnail" className="w-full h-full object-cover" /> : <Video size={24} className="text-nova-muted" />}
