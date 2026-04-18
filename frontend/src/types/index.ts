@@ -13,8 +13,9 @@ export interface ShowConfig {
   display_name: string
   description: string
   color: string
-  voice_id: string
-  avatar_id: string
+  voice_id: string          // ElevenLabs voice ID (Mode B — fallback)
+  avatar_id: string         // HeyGen avatar ID
+  heygen_voice_id: string   // HeyGen cloned voice ID (Mode A — preferred)
   day_of_week: string
   created_at: string
 }
@@ -47,4 +48,5 @@ export interface ProducePayload {
   show_name: string
   voice_id: string
   avatar_id: string
+  heygen_voice_id: string
 }
