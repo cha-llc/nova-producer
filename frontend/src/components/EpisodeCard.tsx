@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Video, ExternalLink, Clock, CheckCircle, AlertCircle,
-  Loader2, Import, Square, Trash2, AlertTriangle
+  Loader2, Import, Square, Trash2, AlertTriangle, CalendarPlus
 } from 'lucide-react'
 import type { AiEpisode } from '../types'
 
@@ -9,6 +9,7 @@ interface Props {
   episode: AiEpisode
   onStop?: (episode: AiEpisode) => Promise<void>
   onDelete?: (episode: AiEpisode) => Promise<void>
+  onSchedule?: (episode: AiEpisode) => void
 }
 
 const showColors: Record<string, string> = {
@@ -18,7 +19,7 @@ const showColors: Record<string, string> = {
   confession_court:   '#C1121F',
 }
 
-export default function EpisodeCard({ episode, onStop, onDelete }: Props) {
+export default function EpisodeCard({ episode, onStop, onDelete, onSchedule }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [stopping, setStopping]   = useState(false)
   const [deleting, setDeleting]   = useState(false)
@@ -150,6 +151,16 @@ export default function EpisodeCard({ episode, onStop, onDelete }: Props) {
       ) : (
         /* Action buttons row */
         <div className="flex items-center gap-2">
+
+          {episode.status === 'complete' && onSchedule && (
+            <button
+              onClick={() => onSchedule(episode)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono border border-nova-border/50 text-nova-muted hover:text-nova-teal hover:border-nova-teal/40 transition-colors"
+            >
+              <CalendarPlus size={12} />
+              Schedule
+            </button>
+          )}
           {episode.status === 'generating' && onStop && (
             <button onClick={handleStop} disabled={stopping}
               className="flex items-center gap-1 text-xs font-mono text-nova-gold border border-nova-gold/30 px-2 py-1 rounded hover:bg-nova-gold/10 transition-all disabled:opacity-40">
