@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Save, CheckCircle, Zap, ImageIcon } from 'lucide-react'
+import { Loader2, Save, CheckCircle, Zap, ImageIcon, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ShowConfig } from '../types'
 
@@ -16,9 +16,10 @@ export default function Settings() {
     voice_id: string; avatar_id: string; heygen_voice_id: string;
     description: string; background_url: string
   }>>({})
-  const [saving, setSaving] = useState<string | null>(null)
-  const [saved, setSaved]   = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [saving, setSaving]     = useState<string | null>(null)
+  const [saved, setSaved]       = useState<string | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     supabase.from('show_configs').select('*').order('display_name').then(({ data }) => {
@@ -41,6 +42,9 @@ export default function Settings() {
 
   function update(id: string, field: string, value: string) {
     setEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+    if (field === 'background_url') {
+      setImgErrors(prev => ({ ...prev, [id]: false }))
+    }
   }
 
   async function saveShow(show: ShowConfig) {
@@ -89,40 +93,17 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* TTN Brand System notice */}
-      <div className="nova-card border-nova-violet/20">
-        <div className="flex items-start gap-3">
-          <ImageIcon size={18} className="text-nova-violet mt-0.5 shrink-0" />
-          <div>
-            <h2 className="font-display text-nova-violet text-lg tracking-wide mb-1">TTN Brand System</h2>
-            <p className="text-sm font-body text-nova-muted leading-relaxed">
-              HeyGen's Brand System is not yet accessible via their API — it's Studio-only. NOVA applies your brand two ways:
-            </p>
-            <div className="mt-3 grid sm:grid-cols-2 gap-3 text-xs font-body">
-              <div className="p-3 rounded-lg bg-nova-navydark/60 border border-nova-border/50">
-                <p className="text-white font-semibold mb-1">Auto — Show color background</p>
-                <p className="text-nova-muted">Each show uses its brand color as the video background automatically. No config needed.</p>
-              </div>
-              <div className="p-3 rounded-lg bg-nova-navydark/60 border border-nova-border/50">
-                <p className="text-white font-semibold mb-1">Custom — Background image URL</p>
-                <p className="text-nova-muted">Upload a branded 1080×1920 background image to Supabase Storage and paste the URL below to override the solid color.</p>
-              </div>
-            </div>
-            <p className="text-xs font-mono text-nova-muted/60 mt-3">
-              Once HeyGen exposes their Brand API, NOVA will use brand_id directly — no changes needed on your end.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Per-show config */}
       {shows.map(show => {
-        const color = SHOW_COLORS[show.show_name] ?? '#C9A84C'
-        const edit  = edits[show.id] ?? { voice_id: '', avatar_id: '', heygen_voice_id: '', description: '', background_url: '' }
-        const mode  = edit.heygen_voice_id.trim() ? 'A' : edit.voice_id.trim() ? 'B' : null
-        const hasBg = Boolean(edit.background_url.trim())
+        const color  = SHOW_COLORS[show.show_name] ?? '#C9A84C'
+        const edit   = edits[show.id] ?? { voice_id: '', avatar_id: '', heygen_voice_id: '', description: '', background_url: '' }
+        const mode   = edit.heygen_voice_id.trim() ? 'A' : edit.voice_id.trim() ? 'B' : null
+        const hasBg  = Boolean(edit.background_url.trim())
+        const imgOk  = hasBg && !imgErrors[show.id]
+
         return (
           <div key={show.id} className="nova-card space-y-4">
+            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-1 h-10 rounded-full" style={{ backgroundColor: color }} />
@@ -191,20 +172,65 @@ export default function Settings() {
               <p className="text-xs font-mono text-nova-violet mb-2 uppercase tracking-widest flex items-center gap-1.5">
                 <ImageIcon size={11} /> TTN Brand Background
               </p>
-              <div className="flex items-center gap-3 p-3 rounded-lg border border-nova-border/50 bg-nova-navydark/40 mb-2">
-                <div className="w-8 h-8 rounded shrink-0 border border-nova-border" style={{ backgroundColor: color }} />
-                <div className="text-xs font-body text-nova-muted">
-                  <p className="text-white font-semibold">Auto: {color} background</p>
-                  <p>This show's brand color is used automatically. Paste a URL below to use a custom branded image instead.</p>
+
+              {/* Thumbnail + URL row */}
+              <div className="flex gap-3 items-start">
+
+                {/* Thumbnail */}
+                <div
+                  className="shrink-0 w-16 rounded-lg overflow-hidden border border-nova-border/50 flex items-center justify-center"
+                  style={{ aspectRatio: '9/16', backgroundColor: `${color}18` }}
+                >
+                  {imgOk ? (
+                    <img
+                      src={edit.background_url}
+                      alt={`${show.display_name} background`}
+                      className="w-full h-full object-cover"
+                      onError={() => setImgErrors(prev => ({ ...prev, [show.id]: true }))}
+                    />
+                  ) : hasBg && imgErrors[show.id] ? (
+                    <div className="flex flex-col items-center gap-1 p-1">
+                      <X size={14} className="text-nova-crimson" />
+                      <span className="text-nova-crimson text-xs font-mono text-center leading-tight">bad URL</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 p-1">
+                      <ImageIcon size={14} className="text-nova-muted/40" />
+                      <span className="text-nova-muted/40 text-xs font-mono text-center leading-tight">no bg</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* URL input + status */}
+                <div className="flex-1 space-y-1.5">
+                  <input
+                    value={edit.background_url}
+                    onChange={e => update(show.id, 'background_url', e.target.value)}
+                    placeholder="https://… background image URL"
+                    className={`nova-input font-mono text-xs ${
+                      imgOk ? 'border-nova-violet/50' : ''
+                    }`}
+                  />
+                  {imgOk && (
+                    <p className="text-xs font-mono text-nova-violet flex items-center gap-1">
+                      <CheckCircle size={10} /> Active — custom background set
+                    </p>
+                  )}
+                  {!hasBg && (
+                    <p className="text-xs font-mono text-nova-muted/60">
+                      Using show color <span className="font-mono" style={{ color }}>{color}</span> as fallback
+                    </p>
+                  )}
+                  {hasBg && imgErrors[show.id] && (
+                    <p className="text-xs font-mono text-nova-crimson">
+                      Image failed to load — check the URL
+                    </p>
+                  )}
                 </div>
               </div>
-              <input value={edit.background_url}
-                onChange={e => update(show.id, 'background_url', e.target.value)}
-                placeholder="https://… (1080×1920 branded background image URL — optional)"
-                className={`nova-input font-mono text-xs ${hasBg ? 'border-nova-violet/50' : ''}`} />
-              {hasBg && <p className="text-xs font-mono text-nova-violet mt-1">✓ Custom background active</p>}
             </div>
 
+            {/* Save */}
             <div className="flex justify-end">
               <button onClick={() => saveShow(show)} disabled={saving === show.id}
                 className="nova-btn-primary flex items-center gap-2 text-sm">
