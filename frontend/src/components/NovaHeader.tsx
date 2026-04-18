@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { Radio, FileText, Video, Settings } from 'lucide-react'
+import ChaNav from './ChaNav'
 
 const nav = [
   { to: '/',         label: 'Dashboard', icon: Radio },
@@ -50,10 +51,13 @@ export default function NovaHeader() {
           ))}
         </nav>
 
-        {/* Status pill */}
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-nova-teal animate-pulse-slow" />
-          <span className="text-xs font-mono text-nova-muted hidden sm:inline">LIVE</span>
+        {/* Cross-app nav + status pill */}
+        <div className="flex items-center gap-3">
+          <ChaNav current="nova" />
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-nova-teal animate-pulse-slow" />
+            <span className="text-xs font-mono text-nova-muted">LIVE</span>
+          </div>
         </div>
       </div>
     </header>
