@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, RefreshCw, Play, CheckCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, RefreshCw, Play, CheckCircle, Clock, ChevronDown, ChevronUp, StopCircle, Flag } from 'lucide-react'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 const PIPELINE_URL = `${SUPABASE_URL}/functions/v1/sph-pipeline`
@@ -57,6 +57,35 @@ export default function SPHPipeline() {
     } else {
       setMsg(`❌ ${d.error}`)
     }
+  }
+
+
+  async function stopProduction(weekNum: number) {
+    setActing(weekNum)
+    setMsg('')
+    const r = await fetch(PIPELINE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop', week_number: weekNum }),
+    })
+    const d = await r.json()
+    setActing(null)
+    setMsg(d.success ? `⛔ Week ${weekNum} production stopped — scripts reset to draft` : `❌ ${d.error}`)
+    load()
+  }
+
+  async function markComplete(weekNum: number) {
+    setActing(weekNum)
+    setMsg('')
+    const r = await fetch(PIPELINE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'complete', week_number: weekNum }),
+    })
+    const d = await r.json()
+    setActing(null)
+    setMsg(d.success ? `✅ Week ${weekNum} marked complete` : `❌ ${d.error}`)
+    load()
   }
 
   async function generate(weekNum: number) {
@@ -178,9 +207,21 @@ export default function SPHPipeline() {
                         </button>
                       )}
                       {w.status === 'producing' && (
-                        <span className="text-xs font-mono text-nova-violet flex items-center gap-1">
-                          <Loader2 size={10} className="animate-spin" /> NOVA producing
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono text-nova-violet flex items-center gap-1">
+                            <Loader2 size={10} className="animate-spin" /> producing
+                          </span>
+                          <button onClick={() => stopProduction(w.week_number)} disabled={acting === w.week_number}
+                            className="nova-btn-ghost text-xs flex items-center gap-1 px-2 py-1 text-nova-crimson hover:border-nova-crimson/40">
+                            {acting === w.week_number ? <Loader2 size={10} className="animate-spin" /> : <StopCircle size={10} />}
+                            Stop
+                          </button>
+                          <button onClick={() => markComplete(w.week_number)} disabled={acting === w.week_number}
+                            className="nova-btn-ghost text-xs flex items-center gap-1 px-2 py-1">
+                            {acting === w.week_number ? <Loader2 size={10} className="animate-spin" /> : <Flag size={10} />}
+                            Mark Done
+                          </button>
+                        </div>
                       )}
                       {(w.status === 'scheduled' || w.status === 'complete') && (
                         <span className="text-xs font-mono text-nova-teal flex items-center gap-1">
