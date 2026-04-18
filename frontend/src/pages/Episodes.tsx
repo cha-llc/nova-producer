@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import EpisodeCard, { HeyGenLibraryCard } from '../components/EpisodeCard'
 import type { AiEpisode, EpisodeStatus, HeyGenVideo } from '../types'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 const PROXY_URL    = `${SUPABASE_URL}/functions/v1/heygen-proxy`
 
 const SHOWS = [
@@ -35,16 +35,13 @@ export default function Episodes() {
   const [importing, setImporting]   = useState<string | null>(null)
   const [importMsg, setImportMsg]   = useState('')
 
-  // Load NOVA episodes from Supabase
   const loadNova = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('ai_episodes').select('*').order('created_at', { ascending: false })
+    const { data } = await supabase.from('ai_episodes').select('*').order('created_at', { ascending: false })
     setEpisodes(data ?? [])
     setLoading(false)
   }, [])
 
-  // Load HeyGen library
   const loadHeyGen = useCallback(async () => {
     setHgLoading(true)
     setHgError('')
@@ -62,7 +59,7 @@ export default function Episodes() {
   useEffect(() => { loadNova() }, [loadNova])
   useEffect(() => { if (tab === 'heygen') loadHeyGen() }, [tab, loadHeyGen])
 
-  // Real-time for NOVA episodes
+  // Real-time
   useEffect(() => {
     const ch = supabase.channel('episodes-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_episodes' }, payload => {
@@ -75,6 +72,52 @@ export default function Episodes() {
       }).subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [])
+
+  // Stop a generating episode
+  async function handleStop(episode: AiEpisode) {
+    // Extract HeyGen video_id from heygen_video_url if available; otherwise use heygen_title as fallback
+    const videoId = episode.heygen_video_url
+      ? episode.heygen_video_url.match(/video_id=([^&]+)/)?.[1] ?? ''
+      : ''
+    await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action:     'cancel',
+        episode_id: episode.id,
+        video_id:   videoId,
+        script_id:  episode.script_id ?? '',
+      }),
+    }).then(r => r.json()).then(d => { if (!d.success) throw new Error(d.error) })
+    // Optimistic UI
+    setEpisodes(p => p.map(e => e.id === episode.id
+      ? { ...e, status: 'failed', error_msg: 'Cancelled by user.' } : e))
+  }
+
+  // Delete an episode
+  async function handleDelete(episode: AiEpisode) {
+    const videoId = episode.heygen_video_url
+      ? episode.heygen_video_url.match(/video_id=([^&]+)/)?.[1] ?? ''
+      : ''
+    // Derive storage path from storage_url if it's a Supabase URL
+    const storagePath = episode.storage_url?.includes('/newsletter-assets/')
+      ? episode.storage_url.split('/newsletter-assets/')[1]?.split('?')[0] ?? ''
+      : ''
+    const r = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action:       'delete',
+        episode_id:   episode.id,
+        video_id:     videoId,
+        storage_path: storagePath,
+      }),
+    })
+    const d = await r.json()
+    if (!d.success) throw new Error(d.error ?? 'Delete failed')
+    // Remove from state immediately
+    setEpisodes(p => p.filter(e => e.id !== episode.id))
+  }
 
   async function importVideo(videoId: string, showName: string) {
     setImporting(videoId)
@@ -104,13 +147,12 @@ export default function Episodes() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-display text-3xl text-white tracking-wide">Episodes</h1>
           {generating > 0 && (
             <p className="text-xs font-mono text-nova-gold mt-0.5 animate-pulse">
-              ⚡ {generating} episode{generating > 1 ? 's' : ''} generating now…
+              ⚡ {generating} generating…
             </p>
           )}
         </div>
@@ -120,18 +162,16 @@ export default function Episodes() {
         </button>
       </div>
 
-      {/* Tab switcher */}
+      {/* Tabs */}
       <div className="flex gap-1 border border-nova-border rounded-lg p-1 w-fit">
         <button onClick={() => setTab('nova')}
           className={`flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded transition-all ${
-            tab === 'nova' ? 'bg-nova-gold/10 text-nova-gold' : 'text-nova-muted hover:text-white'
-          }`}>
+            tab === 'nova' ? 'bg-nova-gold/10 text-nova-gold' : 'text-nova-muted hover:text-white'}`}>
           <Tv size={12} /> NOVA Episodes
         </button>
         <button onClick={() => setTab('heygen')}
           className={`flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded transition-all ${
-            tab === 'heygen' ? 'bg-nova-violet/10 text-nova-violet' : 'text-nova-muted hover:text-white'
-          }`}>
+            tab === 'heygen' ? 'bg-nova-violet/10 text-nova-violet' : 'text-nova-muted hover:text-white'}`}>
           <Library size={12} /> HeyGen Library
         </button>
       </div>
@@ -148,8 +188,9 @@ export default function Episodes() {
                     className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition-all ${
                       showFilter === s.key
                         ? 'bg-nova-gold/10 border-nova-gold text-nova-gold'
-                        : 'border-nova-border text-nova-muted hover:text-white'
-                    }`}>{s.label}</button>
+                        : 'border-nova-border text-nova-muted hover:text-white'}`}>
+                    {s.label}
+                  </button>
                 ))}
               </div>
             </div>
@@ -159,8 +200,9 @@ export default function Episodes() {
                   className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition-all ${
                     statusFilter === s.key
                       ? 'bg-nova-teal/10 border-nova-teal text-nova-teal'
-                      : 'border-nova-border text-nova-muted hover:text-white'
-                  }`}>{s.label}</button>
+                      : 'border-nova-border text-nova-muted hover:text-white'}`}>
+                  {s.label}
+                </button>
               ))}
             </div>
           </div>
@@ -173,18 +215,26 @@ export default function Episodes() {
             <div className="nova-card text-center py-20">
               <p className="font-display text-nova-muted text-2xl tracking-wide mb-2">NO EPISODES YET</p>
               <p className="text-sm font-body text-nova-muted">
-                Write a script and hit <span className="text-nova-gold">Produce with NOVA</span>, or import from the HeyGen Library tab.
+                Write a script → <span className="text-nova-gold">Produce with NOVA</span>, or import from HeyGen Library.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filtered.map(ep => <EpisodeCard key={ep.id} episode={ep} />)}
+              {filtered.map(ep => (
+                <EpisodeCard
+                  key={ep.id}
+                  episode={ep}
+                  onStop={ep.status === 'generating' ? handleStop : undefined}
+                  onDelete={handleDelete}
+                />
+              ))}
             </div>
           )}
 
           {!loading && filtered.length > 0 && (
             <p className="text-xs font-mono text-nova-muted text-center">
-              {filtered.length} episode{filtered.length !== 1 ? 's' : ''}{(showFilter !== 'all' || statusFilter !== 'all') && ' (filtered)'}
+              {filtered.length} episode{filtered.length !== 1 ? 's' : ''}
+              {(showFilter !== 'all' || statusFilter !== 'all') && ' (filtered)'}
             </p>
           )}
         </>
@@ -196,26 +246,25 @@ export default function Episodes() {
           <div className="nova-card border-nova-violet/20 space-y-1">
             <p className="text-sm font-body text-white font-semibold">HeyGen Studio Library</p>
             <p className="text-xs font-body text-nova-muted leading-relaxed">
-              Videos you've created in HeyGen Studio are shown here. Click any show button to import a completed video into NOVA — it will appear in your NOVA Episodes and be available to post via Socialblu.
+              All videos from your HeyGen account. Import any completed video into a NOVA show to post via Socialblu.
             </p>
           </div>
 
-          {/* API credit warning */}
           <div className="nova-card border-nova-gold/20 flex items-start gap-3">
             <AlertTriangle size={16} className="text-nova-gold shrink-0 mt-0.5" />
-            <div className="text-xs font-body text-nova-muted leading-relaxed">
-              <span className="text-nova-gold font-semibold">HeyGen API Credits needed for NOVA generation.</span>{' '}
-              NOVA generates videos via the HeyGen API, which requires separate "API credits" from your regular studio plan.
-              Go to <a href="https://app.heygen.com/billing" target="_blank" rel="noreferrer"
-                className="text-nova-gold underline">app.heygen.com/billing</a> to purchase API credits.
-              In the meantime, you can import completed Studio videos below.
-            </div>
+            <p className="text-xs font-body text-nova-muted leading-relaxed">
+              <span className="text-nova-gold font-semibold">HeyGen API Credits needed for NOVA auto-generation. </span>
+              Purchase at <a href="https://app.heygen.com/billing" target="_blank" rel="noreferrer"
+                className="text-nova-gold underline">app.heygen.com/billing</a>.
+              Studio videos below can be imported manually.
+            </p>
           </div>
 
           {importMsg && (
             <p className={`text-xs font-mono px-3 py-2 rounded ${
-              importMsg.startsWith('✓') ? 'bg-green-400/10 text-green-400' : 'bg-nova-crimson/10 text-nova-crimson'
-            }`}>{importMsg}</p>
+              importMsg.startsWith('✓') ? 'bg-green-400/10 text-green-400' : 'bg-nova-crimson/10 text-nova-crimson'}`}>
+              {importMsg}
+            </p>
           )}
 
           {hgLoading ? (
@@ -232,7 +281,7 @@ export default function Episodes() {
               <p className="font-display text-nova-muted text-2xl tracking-wide mb-2">NO HEYGEN VIDEOS</p>
               <p className="text-sm font-body text-nova-muted">
                 Create videos in <a href="https://app.heygen.com" target="_blank" rel="noreferrer"
-                  className="text-nova-violet underline">HeyGen Studio</a> and they will appear here.
+                  className="text-nova-violet underline">HeyGen Studio</a> and they'll appear here.
               </p>
             </div>
           ) : (
