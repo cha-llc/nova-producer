@@ -4,7 +4,8 @@ import NovaHeader from './components/NovaHeader'
 import Dashboard from './pages/Dashboard'
 import Scripts   from './pages/Scripts'
 import Episodes  from './pages/Episodes'
-import Settings  from './pages/Settings'
+import Settings     from './pages/Settings'
+import SPHPipeline  from './pages/SPHPipeline'
 
 export default function App() {
   return (
@@ -16,7 +17,8 @@ export default function App() {
             <Route path="/"         element={<Dashboard />} />
             <Route path="/scripts"  element={<Scripts />} />
             <Route path="/episodes" element={<Episodes />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/sph" element={<SPHPipeline />} />
+          <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
       </BrowserRouter>
