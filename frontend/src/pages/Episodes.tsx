@@ -36,6 +36,7 @@ export default function Episodes() {
   const [hgError, setHgError]       = useState('')
   const [importing, setImporting]   = useState<string | null>(null)
   const [importMsg, setImportMsg]   = useState('')
+  const [scheduleEp, setScheduleEp] = useState<AiEpisode | null>(null)
 
   const loadNova = useCallback(async () => {
     setLoading(true)
@@ -228,6 +229,7 @@ export default function Episodes() {
                   episode={ep}
                   onStop={ep.status === 'generating' ? handleStop : undefined}
                   onDelete={handleDelete}
+                  onSchedule={ep.status === 'complete' ? (e) => setScheduleEp(e) : undefined}
                 />
               ))}
             </div>
@@ -301,5 +303,13 @@ export default function Episodes() {
         </div>
       )}
     </div>
+
+      {scheduleEp && (
+        <ScheduleModal
+          episode={scheduleEp}
+          onClose={() => setScheduleEp(null)}
+          onScheduled={() => { setScheduleEp(null); load() }}
+        />
+      )}
   )
 }
