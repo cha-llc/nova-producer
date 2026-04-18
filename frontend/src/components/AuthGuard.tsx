@@ -1,4 +1,4 @@
-import { useEffect, useState, ReactNode } from 'react'
+import { useEffect, useState, ReactNode, Fragment } from 'react'
 
 const BUDGET_MANAGER = 'https://cha-budget-manager.vercel.app'
 const SUPABASE_URL   = 'https://vzzzqsmqqaoilkmskadl.supabase.co'
@@ -25,16 +25,14 @@ export default function AuthGuard({ children }: Props) {
   const [state, setState] = useState<'checking' | 'allowed' | 'denied'>('checking')
 
   useEffect(() => {
-    (async () => {
-      // 1. Check URL param first (fresh handoff from Budget Manager)
-      const params  = new URLSearchParams(window.location.search)
+    ;(async () => {
+      const params   = new URLSearchParams(window.location.search)
       const urlToken = params.get('access_token')
 
       if (urlToken) {
         const valid = await validateToken(urlToken)
         if (valid) {
           localStorage.setItem(STORAGE_KEY, urlToken)
-          // Clean token from URL without reload
           params.delete('access_token')
           const clean = params.toString()
           window.history.replaceState({}, '', clean ? `?${clean}` : window.location.pathname)
@@ -43,7 +41,6 @@ export default function AuthGuard({ children }: Props) {
         }
       }
 
-      // 2. Check stored token
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const valid = await validateToken(stored)
@@ -54,24 +51,21 @@ export default function AuthGuard({ children }: Props) {
         localStorage.removeItem(STORAGE_KEY)
       }
 
-      // 3. No valid token — redirect to Budget Manager login
       setState('denied')
       window.location.href = `${BUDGET_MANAGER}/login?redirect=nova`
     })()
   }, [])
 
-  if (state === 'checking') {
-    return (
-      <div style={{ minHeight: '100vh', background: '#0D0D1A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 48, height: 48, background: '#C9A84C', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 28, fontWeight: 900, color: '#1A1A2E' }}>N</div>
-          <p style={{ color: '#6B6B8A', fontSize: 13, letterSpacing: 1 }}>Verifying access…</p>
-        </div>
+  if (state === 'checking') return (
+    <div style={{ minHeight:'100vh', background:'#0D0D1A', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ width:48, height:48, background:'#C9A84C', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:28, fontWeight:900, color:'#1A1A2E' }}>N</div>
+        <p style={{ color:'#6B6B8A', fontSize:13, letterSpacing:1, fontFamily:'sans-serif' }}>Verifying access…</p>
       </div>
-    )
-  }
+    </div>
+  )
 
   if (state === 'denied') return null
 
-  return <>>{children}</>
+  return <Fragment>{children}</Fragment>
 }
