@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Filter, Library, Tv, AlertTriangle } from 'lucide-react'
+import { RefreshCw, Filter, Library, Tv } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import EpisodeCard, { HeyGenLibraryCard } from '../components/EpisodeCard'
 import ScheduleModal from '../components/ScheduleModal'
@@ -100,16 +100,12 @@ export default function Episodes() {
     setEpisodes(p => p.filter(e => e.id !== episode.id))
   }
 
-  // Load HeyGen library
+  // Load HeyGen library — BUG FIX: use GET ?action=list, not POST
   async function loadHeyGen() {
     setHgLoading(true)
     setHgError('')
     try {
-      const r = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'list' }),
-      })
+      const r = await fetch(`${PROXY_URL}?action=list`, { method: 'GET' })
       const d = await r.json()
       if (!d.success) throw new Error(d.error ?? 'Failed to load HeyGen library')
       setHeygenVids(d.videos ?? [])
@@ -226,7 +222,7 @@ export default function Episodes() {
                     onStop={ep.status === 'generating' ? handleStop : undefined}
                     onDelete={handleDelete}
                     onSchedule={ep.status === 'complete' ? (e) => setScheduleEp(e) : undefined}
-                  onRegenerate={() => load()}
+                    onRegenerate={() => load()}
                   />
                 ))}
               </div>
@@ -244,19 +240,11 @@ export default function Episodes() {
         {/* HeyGen Library tab */}
         {tab === 'heygen' && (
           <div className="space-y-5">
+            {/* Info card — no credits warning */}
             <div className="nova-card border-nova-violet/20 space-y-1">
               <p className="text-sm font-body text-white font-semibold">HeyGen Studio Library</p>
               <p className="text-xs font-body text-nova-muted leading-relaxed">
                 All videos from your HeyGen account. Import any completed video into a NOVA show to post via Socialblu.
-              </p>
-            </div>
-
-            <div className="nova-card border-nova-gold/20 flex items-start gap-3">
-              <AlertTriangle size={16} className="text-nova-gold shrink-0 mt-0.5" />
-              <p className="text-xs font-body text-nova-muted leading-relaxed">
-                <span className="text-nova-gold font-semibold">HeyGen API Credits needed for NOVA auto-generation. </span>
-                Purchase at <a href="https://app.heygen.com/billing" target="_blank" rel="noreferrer"
-                  className="text-nova-gold underline">app.heygen.com/billing</a>.
               </p>
             </div>
 
