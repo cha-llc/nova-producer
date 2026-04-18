@@ -10,48 +10,51 @@ interface Stats { scripts: number; episodes: number; done: number; failed: numbe
 export default function Dashboard() {
   const navigate = useNavigate()
   const [shows, setShows]     = useState<ShowConfig[]>([])
-  const [episodes, setEpisodes] = useState<AiEpisode[]>([])
-  const [stats, setStats]     = useState<Record<string, { scripts: number; episodes: number }>>({})
+  const [recentEps, setRecent] = useState<AiEpisode[]>([])
+  const [showStats, setShowStats] = useState<Record<string, { scripts: number; episodes: number }>>({})
   const [totals, setTotals]   = useState<Stats>({ scripts: 0, episodes: 0, done: 0, failed: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const [showsRes, scriptsRes, episodesRes] = await Promise.all([
+      const [showsRes, scriptsRes, recentRes, totalEpsRes] = await Promise.all([
         supabase.from('show_configs').select('*').order('display_name'),
         supabase.from('show_scripts').select('id, show_id, status'),
-        supabase.from('ai_episodes').select('*').order('created_at', { ascending: false }).limit(6),
+        // Recent episodes for the display cards (limit 4)
+        supabase.from('ai_episodes').select('*').order('created_at', { ascending: false }).limit(4),
+        // Separate unrestricted count for accurate stats
+        supabase.from('ai_episodes').select('id, show_name, status'),
       ])
 
-      const s = showsRes.data ?? []
+      const s       = showsRes.data ?? []
       const scripts = scriptsRes.data ?? []
-      const eps = episodesRes.data ?? []
+      const recent  = recentRes.data ?? []
+      const allEps  = totalEpsRes.data ?? []
 
       setShows(s)
-      setEpisodes(eps)
+      setRecent(recent)
 
+      // Stats per show use all episodes (not just recent 4)
       const byShow: Record<string, { scripts: number; episodes: number }> = {}
       for (const show of s) {
         byShow[show.id] = {
-          scripts: scripts.filter(sc => sc.show_id === show.id).length,
-          episodes: eps.filter(ep => ep.show_name === show.show_name).length,
+          scripts:  scripts.filter(sc => sc.show_id === show.id).length,
+          episodes: allEps.filter(ep => ep.show_name === show.show_name).length,
         }
       }
-      setStats(byShow)
+      setShowStats(byShow)
 
       setTotals({
-        scripts: scripts.length,
-        episodes: eps.length,
-        done: eps.filter(e => e.status === 'complete').length,
-        failed: eps.filter(e => e.status === 'failed').length,
+        scripts:  scripts.length,
+        episodes: allEps.length,
+        done:     allEps.filter(e => e.status === 'complete').length,
+        failed:   allEps.filter(e => e.status === 'failed').length,
       })
 
       setLoading(false)
     }
     load()
   }, [])
-
-  const recentEps = episodes.slice(0, 4)
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -108,8 +111,8 @@ export default function Dashboard() {
               <ShowCard
                 key={show.id}
                 show={show}
-                scriptCount={stats[show.id]?.scripts ?? 0}
-                episodeCount={stats[show.id]?.episodes ?? 0}
+                scriptCount={showStats[show.id]?.scripts ?? 0}
+                episodeCount={showStats[show.id]?.episodes ?? 0}
                 onClick={() => navigate(`/scripts?show=${show.show_name}`)}
               />
             ))}
