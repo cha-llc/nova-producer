@@ -1,152 +1,240 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Zap, TrendingUp, Video, FileText } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { Radio, FileText, Video, Brain, Mic, Sparkles, TrendingUp,
+         CheckCircle, Loader2, AlertCircle, RefreshCw, ArrowRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import ShowCard from '../components/ShowCard'
-import type { ShowConfig, AiEpisode } from '../types'
+import { NavLink } from 'react-router-dom'
 
-interface Stats { scripts: number; episodes: number; done: number; failed: number }
+interface Stats {
+  total_episodes: number
+  complete_episodes: number
+  generating_episodes: number
+  total_scripts: number
+  ready_scripts: number
+  done_scripts: number
+  social_complete: number
+  voice_clones: number
+  shows: Array<{ show_name: string; display_name: string; color: string; episodes: number }>
+}
+
+const EMPTY: Stats = {
+  total_episodes: 0, complete_episodes: 0, generating_episodes: 0,
+  total_scripts: 0, ready_scripts: 0, done_scripts: 0,
+  social_complete: 0, voice_clones: 0, shows: [],
+}
 
 export default function Dashboard() {
-  const navigate = useNavigate()
-  const [shows, setShows]     = useState<ShowConfig[]>([])
-  const [recentEps, setRecent] = useState<AiEpisode[]>([])
-  const [showStats, setShowStats] = useState<Record<string, { scripts: number; episodes: number }>>({})
-  const [totals, setTotals]   = useState<Stats>({ scripts: 0, episodes: 0, done: 0, failed: 0 })
-  const [loading, setLoading] = useState(true)
+  const [stats, setStats]       = useState<Stats>(EMPTY)
+  const [loading, setLoading]   = useState(true)
+  const [recentEps, setRecentEps] = useState<Array<{ id: string; show_name: string; episode_title: string; heygen_title: string; status: string; storage_url: string; thumbnail_url: string; created_at: string }>>([])
 
-  useEffect(() => {
-    async function load() {
-      const [showsRes, scriptsRes, recentRes, totalEpsRes] = await Promise.all([
-        supabase.from('show_configs').select('*').order('display_name'),
-        supabase.from('show_scripts').select('id, show_id, status'),
-        // Recent episodes for the display cards (limit 4)
-        supabase.from('ai_episodes').select('*').order('created_at', { ascending: false }).limit(4),
-        // Separate unrestricted count for accurate stats
-        supabase.from('ai_episodes').select('id, show_name, status'),
-      ])
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [
+      { count: totalEps },
+      { count: completeEps },
+      { count: genEps },
+      { count: totalScripts },
+      { count: readyScripts },
+      { count: doneScripts },
+      { count: socialDone },
+      { count: voiceClones },
+      { data: shows },
+      { data: recentData },
+    ] = await Promise.all([
+      supabase.from('ai_episodes').select('id', { count: 'exact', head: true }),
+      supabase.from('ai_episodes').select('id', { count: 'exact', head: true }).eq('status', 'complete'),
+      supabase.from('ai_episodes').select('id', { count: 'exact', head: true }).eq('status', 'generating'),
+      supabase.from('show_scripts').select('id', { count: 'exact', head: true }),
+      supabase.from('show_scripts').select('id', { count: 'exact', head: true }).eq('status', 'ready'),
+      supabase.from('show_scripts').select('id', { count: 'exact', head: true }).eq('status', 'done'),
+      supabase.from('nova_social_content').select('id', { count: 'exact', head: true }).eq('status', 'complete'),
+      supabase.from('nova_voice_clones').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+      supabase.from('show_configs').select('show_name, display_name, color'),
+      supabase.from('ai_episodes').select('id,show_name,episode_title,heygen_title,status,storage_url,thumbnail_url,created_at')
+        .order('created_at', { ascending: false }).limit(6),
+    ])
 
-      const s       = showsRes.data ?? []
-      const scripts = scriptsRes.data ?? []
-      const recent  = recentRes.data ?? []
-      const allEps  = totalEpsRes.data ?? []
-
-      setShows(s)
-      setRecent(recent)
-
-      // Stats per show use all episodes (not just recent 4)
-      const byShow: Record<string, { scripts: number; episodes: number }> = {}
-      for (const show of s) {
-        byShow[show.id] = {
-          scripts:  scripts.filter(sc => sc.show_id === show.id).length,
-          episodes: allEps.filter(ep => ep.show_name === show.show_name).length,
-        }
-      }
-      setShowStats(byShow)
-
-      setTotals({
-        scripts:  scripts.length,
-        episodes: allEps.length,
-        done:     allEps.filter(e => e.status === 'complete').length,
-        failed:   allEps.filter(e => e.status === 'failed').length,
-      })
-
-      setLoading(false)
-    }
-    load()
+    setStats({
+      total_episodes:     totalEps    ?? 0,
+      complete_episodes:  completeEps ?? 0,
+      generating_episodes: genEps    ?? 0,
+      total_scripts:      totalScripts ?? 0,
+      ready_scripts:      readyScripts ?? 0,
+      done_scripts:       doneScripts  ?? 0,
+      social_complete:    socialDone   ?? 0,
+      voice_clones:       voiceClones  ?? 0,
+      shows: (shows ?? []).map(s => ({ ...s, episodes: 0 })),
+    })
+    setRecentEps(recentData ?? [])
+    setLoading(false)
   }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const SHOW_COLORS: Record<string, string> = {
+    sunday_power_hour: '#C9A84C',
+    motivation_court:  '#2A9D8F',
+    tea_time_with_cj:  '#9B5DE5',
+    confession_court:  '#C1121F',
+  }
+
+  const topCards = [
+    { label: 'Episodes Published',  value: stats.complete_episodes,  icon: CheckCircle, color: 'text-nova-teal',    sub: `${stats.total_episodes} total` },
+    { label: 'Scripts Ready',       value: stats.ready_scripts,      icon: FileText,    color: 'text-nova-gold',   sub: `${stats.done_scripts} published` },
+    { label: 'AI Content Generated',value: stats.social_complete,    icon: Brain,       color: 'text-nova-violet', sub: 'Studio outputs' },
+    { label: 'Voice Clones Active', value: stats.voice_clones,       icon: Mic,         color: 'text-nova-teal',   sub: 'ElevenLabs clones' },
+  ]
+
+  const quickLinks = [
+    { to: '/scripts',  label: 'Write Scripts',        icon: FileText, color: 'nova-gold',   desc: 'Queue content for NOVA' },
+    { to: '/episodes', label: 'View Episodes',        icon: Video,    color: 'nova-teal',   desc: 'All produced videos' },
+    { to: '/studio',   label: 'Content Studio',       icon: Brain,    color: 'nova-violet', desc: 'AI captions & hooks' },
+    { to: '/voice',    label: 'Voice Studio',         icon: Mic,      color: 'nova-teal',   desc: 'Clone your voice' },
+  ]
 
   return (
     <div className="space-y-8 animate-fade-in">
-
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-nova-border bg-nova-surface p-8">
-        <div className="absolute inset-0 bg-gradient-to-br from-nova-gold/5 via-transparent to-nova-violet/5 pointer-events-none" />
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-2 h-2 rounded-full bg-nova-teal animate-pulse-slow" />
-            <span className="text-xs font-mono text-nova-teal uppercase tracking-widest">System Online</span>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-2 h-2 rounded-full bg-nova-teal animate-pulse-slow" />
+            <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Network Output and Voice Automator</span>
           </div>
-          <h1 className="font-display text-4xl text-white tracking-widest mb-2">NOVA</h1>
-          <p className="font-body text-nova-muted text-sm max-w-md">
-            Network Output &amp; Voice Automator. Your AI co-host for Tea Time Network — 
-            producing all four shows in your voice, automatically.
+          <h1 className="font-display text-4xl text-white tracking-wide">NOVA v2</h1>
+          <p className="text-sm font-mono text-nova-muted mt-1">
+            AI-powered video production, voice cloning, and content generation for Tea Time Network
           </p>
         </div>
+        <button onClick={load} disabled={loading}
+          className="nova-btn-ghost flex items-center gap-2 text-sm disabled:opacity-50">
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Total Scripts',  value: totals.scripts,  icon: FileText,    color: 'text-nova-gold' },
-          { label: 'Episodes Made',  value: totals.episodes, icon: Video,       color: 'text-nova-teal' },
-          { label: 'Published',      value: totals.done,     icon: TrendingUp,  color: 'text-green-400' },
-          { label: 'Failed',         value: totals.failed,   icon: Zap,         color: 'text-nova-crimson' },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="nova-card">
-            <Icon size={16} className={`${color} mb-2`} />
-            <div className={`font-display text-3xl tracking-wide ${color}`}>{value}</div>
-            <div className="text-xs font-mono text-nova-muted mt-0.5">{label}</div>
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {topCards.map(({ label, value, icon: Icon, color, sub }) => (
+          <div key={label} className="nova-card flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Icon size={15} className={color} />
+              <span className="text-xs font-mono text-nova-muted">{label}</span>
+            </div>
+            <div className="flex items-end gap-2">
+              {loading
+                ? <Loader2 size={20} className="animate-spin text-nova-muted" />
+                : <span className="font-display text-3xl text-white">{value}</span>
+              }
+            </div>
+            <p className="text-xs font-mono text-nova-muted">{sub}</p>
           </div>
         ))}
       </div>
 
-      {/* Shows */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-white text-2xl tracking-wide">Shows</h2>
-          <button onClick={() => navigate('/scripts')} className="nova-btn-ghost text-xs">
-            + New Script
-          </button>
+      {/* Generating indicator */}
+      {stats.generating_episodes > 0 && (
+        <div className="nova-card border border-nova-gold/30 flex items-center gap-3">
+          <Loader2 size={16} className="animate-spin text-nova-gold flex-shrink-0" />
+          <div>
+            <p className="text-sm font-body text-white">
+              {stats.generating_episodes} episode{stats.generating_episodes > 1 ? 's' : ''} currently rendering
+            </p>
+            <p className="text-xs font-mono text-nova-muted">NOVA Poll checks every 2 minutes and will auto-publish when complete</p>
+          </div>
         </div>
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1,2,3,4].map(i => (
-              <div key={i} className="nova-card h-44 animate-pulse bg-nova-border/20" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {shows.map(show => (
-              <ShowCard
-                key={show.id}
-                show={show}
-                scriptCount={showStats[show.id]?.scripts ?? 0}
-                episodeCount={showStats[show.id]?.episodes ?? 0}
-                onClick={() => navigate(`/scripts?show=${show.show_name}`)}
-              />
-            ))}
-          </div>
-        )}
+      )}
+
+      {/* Quick links */}
+      <div>
+        <p className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-3">Quick Access</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {quickLinks.map(({ to, label, icon: Icon, color, desc }) => (
+            <NavLink key={to} to={to}
+              className={`nova-card flex flex-col gap-2 hover:border-${color}/40 transition-all group`}>
+              <Icon size={18} className={`text-${color}`} />
+              <div>
+                <p className="text-sm font-body text-white group-hover:text-nova-gold transition-colors">{label}</p>
+                <p className="text-xs font-mono text-nova-muted">{desc}</p>
+              </div>
+              <ArrowRight size={13} className="text-nova-muted/40 group-hover:text-nova-gold transition-colors mt-auto" />
+            </NavLink>
+          ))}
+        </div>
       </div>
 
       {/* Recent episodes */}
       {recentEps.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-white text-2xl tracking-wide">Recent Episodes</h2>
-            <button onClick={() => navigate('/episodes')} className="nova-btn-ghost text-xs">
-              View All
-            </button>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-mono text-nova-muted uppercase tracking-widest flex items-center gap-2">
+              <Sparkles size={11} /> Recent Episodes
+            </p>
+            <NavLink to="/episodes" className="text-xs font-mono text-nova-muted hover:text-nova-gold transition-colors flex items-center gap-1">
+              View all <ArrowRight size={11} />
+            </NavLink>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {recentEps.map(ep => (
-              <div key={ep.id} className="nova-card">
-                <div className="text-xs font-mono text-nova-muted capitalize mb-1">
-                  {ep.show_name.replace(/_/g, ' ')}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {recentEps.map(ep => {
+              const color = SHOW_COLORS[ep.show_name] ?? '#C9A84C'
+              const title = ep.episode_title || ep.heygen_title || 'Untitled'
+              return (
+                <div key={ep.id} className="nova-card group overflow-hidden p-0">
+                  {(ep.thumbnail_url) ? (
+                    <div className="relative h-24 overflow-hidden">
+                      <img src={ep.thumbnail_url} alt={title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-nova-navydark/80 to-transparent" />
+                      <div className="absolute bottom-0 left-0 right-0 p-2">
+                        <p className="text-xs font-body text-white line-clamp-1">{title}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-24 flex items-center justify-center" style={{ backgroundColor: `${color}15` }}>
+                      <Radio size={24} style={{ color }} className="opacity-40" />
+                    </div>
+                  )}
+                  <div className="p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+                        style={{ backgroundColor: `${color}18`, color }}>
+                        {ep.show_name.split('_')[0]}
+                      </span>
+                      {ep.status === 'complete'   && <CheckCircle size={11} className="text-nova-teal" />}
+                      {ep.status === 'generating' && <Loader2 size={11} className="animate-spin text-nova-gold" />}
+                      {ep.status === 'failed'     && <AlertCircle size={11} className="text-nova-crimson" />}
+                    </div>
+                    {ep.storage_url && ep.status === 'complete' && (
+                      <a href={ep.storage_url} target="_blank" rel="noreferrer"
+                        className="mt-2 flex items-center gap-1 text-[10px] font-mono text-nova-muted hover:text-nova-gold transition-colors">
+                        <TrendingUp size={9} /> Watch
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    ep.status === 'complete' ? 'bg-green-400' :
-                    ep.status === 'generating' ? 'bg-nova-gold animate-pulse' : 'bg-nova-crimson'
-                  }`} />
-                  <span className="text-sm font-body text-white capitalize">{ep.status}</span>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Shows status */}
+      {stats.shows.length > 0 && (
+        <div>
+          <p className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-3">Shows</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {stats.shows.map(show => {
+              const color = show.color || SHOW_COLORS[show.show_name] || '#C9A84C'
+              return (
+                <div key={show.show_name} className="nova-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                    <span className="text-xs font-mono text-white">{show.display_name}</span>
+                  </div>
+                  <p className="text-[10px] font-mono text-nova-muted">{show.show_name}</p>
                 </div>
-                <div className="text-xs font-mono text-nova-muted mt-2">
-                  {new Date(ep.created_at).toLocaleDateString()}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
