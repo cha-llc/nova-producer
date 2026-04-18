@@ -130,7 +130,7 @@ export default function SPHPipeline() {
       <div className="nova-card border-nova-gold/20 text-xs font-body text-nova-muted space-y-1">
         <p className="text-nova-gold font-semibold">One-time setup needed:</p>
         <p>1. Add <code className="font-mono text-white bg-nova-navydark px-1 rounded">ANTHROPIC_API_KEY</code> to Supabase secrets (console.anthropic.com → API Keys) — required for auto-generating future weeks' scripts</p>
-        <p>2. Enable <code className="font-mono text-white bg-nova-navydark px-1 rounded">pg_cron</code> in Supabase Dashboard → Database → Extensions → search "pg_cron" → enable it → then run: <code className="font-mono text-white bg-nova-navydark px-1 rounded">select cron.schedule('sph-daily','30 12 * * *', 'select net.http_post(url:=''https://vzzzqsmqqaoilkmskadl.supabase.co/functions/v1/sph-post-scheduler'',headers:=''{{"Content-Type":"application/json"}}'',body:=''{}'')' );</code></p>
+        <p>2. Enable <code className="font-mono text-white bg-nova-navydark px-1 rounded">pg_cron</code> in Supabase Dashboard → Database → Extensions. Once enabled, run the schedule command shown in #nova Slack.</p>
       </div>
 
       {/* Categories */}
