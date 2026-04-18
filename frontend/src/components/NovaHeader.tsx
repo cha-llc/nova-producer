@@ -1,12 +1,14 @@
 import { NavLink } from 'react-router-dom'
-import { Radio, FileText, Video, Settings, Sun } from 'lucide-react'
+import { Radio, FileText, Video, Settings, Sun, Brain, Mic } from 'lucide-react'
 import ChaNav from './ChaNav'
 
 const nav = [
-  { to: '/',         label: 'Dashboard', icon: Radio },
+  { to: '/',         label: 'Dashboard', icon: Radio    },
   { to: '/scripts',  label: 'Scripts',   icon: FileText },
-  { to: '/episodes', label: 'Episodes',  icon: Video },
-  { to: '/sph',      label: 'SPH',       icon: Sun },
+  { to: '/episodes', label: 'Episodes',  icon: Video    },
+  { to: '/studio',   label: 'Studio',    icon: Brain    },
+  { to: '/voice',    label: 'Voice',     icon: Mic      },
+  { to: '/sph',      label: 'SPH',       icon: Sun      },
   { to: '/settings', label: 'Settings',  icon: Settings },
 ]
 
@@ -14,8 +16,6 @@ export default function NovaHeader() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-nova-border bg-nova-navydark/90 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
-
-        {/* Logo */}
         <div className="flex items-center gap-3">
           <div className="relative">
             <div className="w-8 h-8 rounded-lg bg-nova-gold flex items-center justify-center">
@@ -31,28 +31,24 @@ export default function NovaHeader() {
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-0.5">
           {nav.map(({ to, label, icon: Icon }) => (
             <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
+              key={to} to={to} end={to === '/'}
               className={({ isActive }) =>
-                `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-body transition-all duration-150 ${
+                `flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-body transition-all duration-150 ${
                   isActive
                     ? 'bg-nova-gold/10 text-nova-gold'
                     : 'text-nova-muted hover:text-white hover:bg-nova-border/40'
                 }`
               }
             >
-              <Icon size={14} />
-              <span className="hidden sm:inline">{label}</span>
+              <Icon size={13} />
+              <span className="hidden md:inline">{label}</span>
             </NavLink>
           ))}
         </nav>
 
-        {/* Cross-app nav + status pill */}
         <div className="flex items-center gap-3">
           <ChaNav current="nova" />
           <div className="hidden sm:flex items-center gap-2">
