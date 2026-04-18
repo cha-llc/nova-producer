@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Loader2, RefreshCw, ChevronDown, ChevronUp,
-  Copy, Check, Save, Play, Search
+  Copy, Check, Save, Play, Search, Plus, X, RotateCcw, AlertTriangle
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -27,10 +27,16 @@ const STATUS_COLOR: Record<string, string> = {
   processing: 'bg-nova-violet/20 text-nova-violet',
   done:       'bg-green-400/20 text-green-400',
   failed:     'bg-nova-crimson/20 text-nova-crimson',
+  scripting:  'bg-blue-400/20 text-blue-400',
 }
 
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const PART_LABEL = ['Opening','Part 1','Part 2','Part 3','Part 4','Part 5','Part 6']
+const EMPTY_FORM = {
+  show_id: '', series_topic: '', series_part: '0',
+  part_title: '', script_text: '', caption: '',
+  post_date: '', post_time_utc: '13:00', status: 'draft'
+}
 
 export default function Scripts() {
   const [scripts, setScripts]   = useState<Script[]>([])
@@ -38,10 +44,18 @@ export default function Scripts() {
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
   const [showFilter, setShowFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [edits, setEdits]       = useState<Record<string, Script>>({})
   const [saving, setSaving]     = useState<string | null>(null)
   const [copied, setCopied]     = useState<string | null>(null)
+  const [regenerating, setRegenerating] = useState<string | null>(null)
+
+  // Create form state
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating]     = useState(false)
+  const [form, setForm]             = useState({ ...EMPTY_FORM })
+  const [createError, setCreateError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -61,15 +75,10 @@ export default function Scripts() {
 
   useEffect(() => { load() }, [load])
 
-  function getShow(showId: string) {
-    return shows.find(s => s.id === showId)
-  }
+  function getShow(showId: string) { return shows.find(s => s.id === showId) }
 
   function edit(script: Script, field: keyof Script, value: string) {
-    setEdits(prev => ({
-      ...prev,
-      [script.id]: { ...(prev[script.id] ?? script), [field]: value }
-    }))
+    setEdits(prev => ({ ...prev, [script.id]: { ...(prev[script.id] ?? script), [field]: value } }))
   }
 
   function edited(scriptId: string) {
@@ -94,23 +103,59 @@ export default function Scripts() {
     setScripts(prev => prev.map(s => s.id === scriptId ? { ...s, status: 'ready' } : s))
   }
 
+  async function regenerate(script: Script) {
+    setRegenerating(script.id)
+    await supabase.from('show_scripts').update({ status: 'draft' }).eq('id', script.id)
+    setScripts(prev => prev.map(s => s.id === script.id ? { ...s, status: 'draft' } : s))
+    // Clear any stale edit state for this script
+    setEdits(prev => { const n = { ...prev }; delete n[script.id]; return n })
+    setRegenerating(null)
+  }
+
   async function copyText(text: string, key: string) {
     await navigator.clipboard.writeText(text)
     setCopied(key)
     setTimeout(() => setCopied(null), 1500)
   }
 
+  async function createScript() {
+    setCreateError('')
+    if (!form.show_id)      return setCreateError('Select a show.')
+    if (!form.series_topic) return setCreateError('Series topic is required.')
+    if (!form.part_title)   return setCreateError('Part title is required.')
+    if (!form.script_text)  return setCreateError('Script text is required.')
+
+    setCreating(true)
+    const { error } = await supabase.from('show_scripts').insert({
+      show_id:          form.show_id,
+      series_topic:     form.series_topic,
+      series_part:      parseInt(form.series_part) || 0,
+      series_week_start: form.post_date || null,
+      part_title:       form.part_title,
+      script_text:      form.script_text,
+      caption:          form.caption,
+      post_date:        form.post_date || null,
+      post_time_utc:    form.post_time_utc,
+      status:           form.status,
+    })
+    setCreating(false)
+    if (error) return setCreateError(error.message)
+    setForm({ ...EMPTY_FORM })
+    setShowCreate(false)
+    load()
+  }
+
   // Group by show + week
   const showMap = Object.fromEntries(shows.map(s => [s.id, s]))
   const filtered = scripts.filter(s => {
-    const matchShow = showFilter === 'all' || s.show_id === showFilter
+    const matchShow   = showFilter === 'all' || s.show_id === showFilter
+    const matchStatus = statusFilter === 'all' || s.status === statusFilter
     const q = search.toLowerCase()
     const matchSearch = !q || s.series_topic.toLowerCase().includes(q) ||
       s.part_title.toLowerCase().includes(q) || s.script_text.toLowerCase().includes(q)
-    return matchShow && matchSearch
+    return matchShow && matchStatus && matchSearch
   })
 
-  // Group: show_id + series_week_start + series_topic
   const groups = filtered.reduce<Record<string, Script[]>>((acc, s) => {
     const key = `${s.show_id}::${s.series_week_start}::${s.series_topic}`
     if (!acc[key]) acc[key] = []
@@ -124,18 +169,175 @@ export default function Scripts() {
     return dateA.localeCompare(dateB)
   })
 
+  const failedCount = scripts.filter(s => s.status === 'failed').length
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-3xl text-white tracking-wide">Scripts</h1>
-          <p className="text-xs font-mono text-nova-muted mt-0.5">{scripts.length} scripts across {groupKeys.length} series</p>
+          <p className="text-xs font-mono text-nova-muted mt-0.5">
+            {scripts.length} scripts · {groupKeys.length} series
+            {failedCount > 0 && (
+              <span className="ml-2 text-nova-crimson">· {failedCount} failed</span>
+            )}
+          </p>
         </div>
-        <button onClick={load} className="nova-btn-ghost flex items-center gap-1.5 text-xs">
-          <RefreshCw size={12} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowCreate(v => !v); setCreateError('') }}
+            className={`nova-btn-primary flex items-center gap-1.5 text-xs px-3 py-2 ${showCreate ? 'opacity-70' : ''}`}
+          >
+            {showCreate ? <><X size={12} /> Cancel</> : <><Plus size={12} /> New Script</>}
+          </button>
+          <button onClick={load} className="nova-btn-ghost flex items-center gap-1.5 text-xs">
+            <RefreshCw size={12} /> Refresh
+          </button>
+        </div>
       </div>
+
+      {/* ── Create Script Box ──────────────────────────────────── */}
+      {showCreate && (
+        <div className="nova-card border-nova-gold/30 bg-nova-navy/80 space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-nova-border/40">
+            <Plus size={14} className="text-nova-gold" />
+            <h2 className="font-display text-base text-nova-gold tracking-wide">Create New Script</h2>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Show */}
+            <div className="col-span-2 sm:col-span-1">
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Show *</label>
+              <select
+                value={form.show_id}
+                onChange={e => setForm(f => ({ ...f, show_id: e.target.value }))}
+                className="nova-input w-full text-sm font-body"
+              >
+                <option value="">— select show —</option>
+                {shows.map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)}
+              </select>
+            </div>
+
+            {/* Status */}
+            <div className="col-span-2 sm:col-span-1">
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Initial Status</label>
+              <select
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                className="nova-input w-full text-sm font-body"
+              >
+                <option value="draft">draft</option>
+                <option value="ready">ready</option>
+              </select>
+            </div>
+
+            {/* Series topic */}
+            <div className="col-span-2">
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Series Topic *</label>
+              <input
+                value={form.series_topic}
+                onChange={e => setForm(f => ({ ...f, series_topic: e.target.value }))}
+                placeholder="e.g. The Case of Potential With No Execution"
+                className="nova-input w-full text-sm font-body"
+              />
+            </div>
+
+            {/* Part number */}
+            <div>
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Part #</label>
+              <select
+                value={form.series_part}
+                onChange={e => setForm(f => ({ ...f, series_part: e.target.value }))}
+                className="nova-input w-full text-sm font-body"
+              >
+                {PART_LABEL.map((l, i) => <option key={i} value={String(i)}>{i} — {l}</option>)}
+              </select>
+            </div>
+
+            {/* Post date */}
+            <div>
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Post Date</label>
+              <input
+                type="date"
+                value={form.post_date}
+                onChange={e => setForm(f => ({ ...f, post_date: e.target.value, series_week_start: e.target.value }))}
+                className="nova-input w-full text-sm font-body"
+              />
+            </div>
+
+            {/* Post time */}
+            <div>
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Post Time UTC</label>
+              <input
+                value={form.post_time_utc}
+                onChange={e => setForm(f => ({ ...f, post_time_utc: e.target.value }))}
+                placeholder="13:00"
+                className="nova-input w-full text-sm font-body"
+              />
+            </div>
+
+            {/* Part title */}
+            <div className="col-span-2 sm:col-span-1">
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Part Title *</label>
+              <input
+                value={form.part_title}
+                onChange={e => setForm(f => ({ ...f, part_title: e.target.value }))}
+                placeholder="e.g. Potential Without Action Is Just a Dream"
+                className="nova-input w-full text-sm font-body"
+              />
+            </div>
+
+            {/* Script text */}
+            <div className="col-span-2">
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Script *</label>
+              <textarea
+                value={form.script_text}
+                onChange={e => setForm(f => ({ ...f, script_text: e.target.value }))}
+                rows={6}
+                placeholder="Court is now in session…"
+                className="nova-input w-full text-sm font-body resize-y leading-relaxed"
+              />
+            </div>
+
+            {/* Caption */}
+            <div className="col-span-2">
+              <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-1 block">Caption</label>
+              <textarea
+                value={form.caption}
+                onChange={e => setForm(f => ({ ...f, caption: e.target.value }))}
+                rows={4}
+                placeholder="Post caption with hashtags…"
+                className="nova-input w-full text-sm font-body resize-y leading-relaxed"
+              />
+            </div>
+          </div>
+
+          {createError && (
+            <p className="text-xs font-mono text-nova-crimson flex items-center gap-1.5">
+              <AlertTriangle size={11} /> {createError}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={() => { setShowCreate(false); setCreateError('') }}
+              className="nova-btn-ghost text-xs px-4 py-2"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={createScript}
+              disabled={creating}
+              className="nova-btn-primary text-xs flex items-center gap-1.5 px-4 py-2"
+            >
+              {creating
+                ? <><Loader2 size={11} className="animate-spin" /> Creating…</>
+                : <><Plus size={11} /> Create Script</>}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
@@ -154,6 +356,15 @@ export default function Scripts() {
           <option value="all">All shows</option>
           {shows.map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)}
         </select>
+        <select
+          value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          className="nova-input px-3 py-2 text-sm font-body"
+        >
+          <option value="all">All statuses</option>
+          {['draft','ready','processing','done','failed','scripting'].map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
       </div>
 
       {loading ? (
@@ -169,11 +380,11 @@ export default function Scripts() {
           const show   = showMap[first.show_id]
           const color  = show?.color ?? '#C9A84C'
           const isOpen = expanded[gk] !== false
-          const allDraft    = parts.every(p => p.status === 'draft')
-          const anyDirty    = parts.some(p => edits[p.id])
+          const anyFailed = parts.some(p => p.status === 'failed')
+          const allDraft  = parts.every(p => p.status === 'draft')
 
           return (
-            <div key={gk} className="nova-card space-y-0">
+            <div key={gk} className={`nova-card space-y-0 ${anyFailed ? 'border-nova-crimson/30' : ''}`}>
               {/* Group header */}
               <button
                 onClick={() => setExpanded(prev => ({ ...prev, [gk]: !isOpen }))}
@@ -187,7 +398,12 @@ export default function Scripts() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {allDraft && (
+                  {anyFailed && (
+                    <span className="nova-badge bg-nova-crimson/20 text-nova-crimson text-xs flex items-center gap-1">
+                      <AlertTriangle size={9} /> failed
+                    </span>
+                  )}
+                  {allDraft && !anyFailed && (
                     <span className="nova-badge bg-nova-border/50 text-nova-muted text-xs">draft</span>
                   )}
                   {isOpen ? <ChevronUp size={14} className="text-nova-muted" /> : <ChevronDown size={14} className="text-nova-muted" />}
@@ -200,13 +416,21 @@ export default function Scripts() {
                   {parts.sort((a,b) => (a.series_part??0) - (b.series_part??0)).map(script => {
                     const e   = edited(script.id)
                     const dirty = Boolean(edits[script.id])
+                    const isFailed = script.status === 'failed'
                     const partLabel = PART_LABEL[script.series_part ?? 0] ?? `Part ${script.series_part}`
                     const dayLabel  = script.post_date
                       ? DAY[new Date(script.post_date + 'T12:00:00Z').getUTCDay()]
                       : ''
 
                     return (
-                      <div key={script.id} className="p-3 rounded-lg bg-nova-navydark/40 border border-nova-border/40 space-y-3">
+                      <div
+                        key={script.id}
+                        className={`p-3 rounded-lg border space-y-3 ${
+                          isFailed
+                            ? 'bg-nova-crimson/5 border-nova-crimson/30'
+                            : 'bg-nova-navydark/40 border-nova-border/40'
+                        }`}
+                      >
                         {/* Part header */}
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ background: `${color}22`, color }}>
@@ -219,6 +443,24 @@ export default function Scripts() {
                             {script.status}
                           </span>
                         </div>
+
+                        {/* Failed banner */}
+                        {isFailed && (
+                          <div className="flex items-center justify-between px-3 py-2 rounded bg-nova-crimson/10 border border-nova-crimson/20">
+                            <p className="text-xs font-mono text-nova-crimson flex items-center gap-1.5">
+                              <AlertTriangle size={11} /> Script marked failed — click Regenerate to reset to draft
+                            </p>
+                            <button
+                              onClick={() => regenerate(script)}
+                              disabled={regenerating === script.id}
+                              className="nova-btn-ghost text-xs flex items-center gap-1.5 px-3 py-1.5 text-nova-crimson border-nova-crimson/40 hover:text-white hover:border-nova-crimson/70"
+                            >
+                              {regenerating === script.id
+                                ? <><Loader2 size={11} className="animate-spin" /> Resetting…</>
+                                : <><RotateCcw size={11} /> Regenerate</>}
+                            </button>
+                          </div>
+                        )}
 
                         {/* Title */}
                         <div>
@@ -278,7 +520,7 @@ export default function Scripts() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-2 justify-end pt-1">
-                          {script.status === 'draft' && (
+                          {(script.status === 'draft' || script.status === 'scripting') && (
                             <button
                               onClick={() => setReady(script.id)}
                               className="nova-btn-ghost text-xs flex items-center gap-1.5 px-3 py-1.5"
