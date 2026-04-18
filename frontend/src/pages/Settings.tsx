@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Save, CheckCircle, Zap, Image, ExternalLink } from 'lucide-react'
+import { Loader2, Save, CheckCircle, Zap, ImageIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ShowConfig } from '../types'
 
@@ -14,7 +14,7 @@ export default function Settings() {
   const [shows, setShows]   = useState<ShowConfig[]>([])
   const [edits, setEdits]   = useState<Record<string, {
     voice_id: string; avatar_id: string; heygen_voice_id: string;
-    description: string; background_url: string;
+    description: string; background_url: string
   }>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved]   = useState<string | null>(null)
@@ -27,11 +27,11 @@ export default function Settings() {
       const init: typeof edits = {}
       for (const show of s) {
         init[show.id] = {
-          voice_id:        show.voice_id        ?? '',
-          avatar_id:       show.avatar_id       ?? '',
+          voice_id:        show.voice_id,
+          avatar_id:       show.avatar_id,
           heygen_voice_id: show.heygen_voice_id ?? '',
-          description:     show.description     ?? '',
-          background_url:  show.background_url  ?? '',
+          description:     show.description,
+          background_url:  show.background_url ?? '',
         }
       }
       setEdits(init)
@@ -45,10 +45,7 @@ export default function Settings() {
 
   async function saveShow(show: ShowConfig) {
     setSaving(show.id)
-    const { error } = await supabase
-      .from('show_configs')
-      .update(edits[show.id])
-      .eq('id', show.id)
+    const { error } = await supabase.from('show_configs').update(edits[show.id]).eq('id', show.id)
     setSaving(null)
     if (!error) { setSaved(show.id); setTimeout(() => setSaved(null), 2500) }
   }
@@ -64,36 +61,8 @@ export default function Settings() {
       <div>
         <h1 className="font-display text-3xl text-white tracking-wide mb-1">Settings</h1>
         <p className="text-sm font-body text-nova-muted">
-          Configure voice, avatar, and brand background for each show.
+          Voice, avatar, and brand settings for each show.
         </p>
-      </div>
-
-      {/* Brand background info */}
-      <div className="nova-card border-nova-violet/20">
-        <div className="flex items-start gap-3">
-          <Image size={18} className="text-nova-violet mt-0.5 shrink-0" />
-          <div>
-            <h2 className="font-display text-nova-violet text-lg tracking-wide mb-2">Brand Background</h2>
-            <p className="text-sm font-body text-nova-muted leading-relaxed mb-3">
-              HeyGen's Brand System isn't accessible via API, but NOVA supports a custom branded
-              background image per show. Upload your TTN-branded background to Supabase Storage and paste
-              the public URL below. Without a URL, NOVA uses the show's accent color.
-            </p>
-            <a
-              href="https://supabase.com/dashboard/project/vzzzqsmqqaoilkmskadl/storage/buckets/newsletter-assets"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-mono text-nova-teal hover:underline"
-            >
-              <ExternalLink size={11} />
-              Open Supabase Storage → newsletter-assets
-            </a>
-            <p className="text-xs font-mono text-nova-muted mt-1.5">
-              Upload to path: <span className="text-white">ai-shows/brands/show_name.jpg</span>
-              &nbsp;→ copy the public URL → paste below
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Voice mode info */}
@@ -107,28 +76,51 @@ export default function Settings() {
             </div>
             <p className="text-white font-semibold mb-1">HeyGen Voice ID</p>
             <p className="text-nova-muted text-xs leading-relaxed">
-              HeyGen built-in voice clone. One API call — voice and avatar together. Best sync.
+              One API call — HeyGen handles voice + avatar together. Best sync and fastest.
             </p>
           </div>
           <div className="p-3 rounded-lg border border-nova-border bg-nova-navydark/40">
             <p className="text-nova-muted text-xs tracking-wide uppercase font-mono mb-1">Mode B — Fallback</p>
             <p className="text-white font-semibold mb-1">ElevenLabs Voice ID</p>
             <p className="text-nova-muted text-xs leading-relaxed">
-              ElevenLabs audio → HeyGen avatar. Two API calls.
+              ElevenLabs audio first, then HeyGen avatar. Two API calls.
             </p>
           </div>
         </div>
-        <p className="text-xs font-mono text-nova-muted mt-3">
-          HeyGen Voice ID set → Mode A used automatically.
-        </p>
       </div>
 
+      {/* TTN Brand System notice */}
+      <div className="nova-card border-nova-violet/20">
+        <div className="flex items-start gap-3">
+          <ImageIcon size={18} className="text-nova-violet mt-0.5 shrink-0" />
+          <div>
+            <h2 className="font-display text-nova-violet text-lg tracking-wide mb-1">TTN Brand System</h2>
+            <p className="text-sm font-body text-nova-muted leading-relaxed">
+              HeyGen's Brand System is not yet accessible via their API — it's Studio-only. NOVA applies your brand two ways:
+            </p>
+            <div className="mt-3 grid sm:grid-cols-2 gap-3 text-xs font-body">
+              <div className="p-3 rounded-lg bg-nova-navydark/60 border border-nova-border/50">
+                <p className="text-white font-semibold mb-1">Auto — Show color background</p>
+                <p className="text-nova-muted">Each show uses its brand color as the video background automatically. No config needed.</p>
+              </div>
+              <div className="p-3 rounded-lg bg-nova-navydark/60 border border-nova-border/50">
+                <p className="text-white font-semibold mb-1">Custom — Background image URL</p>
+                <p className="text-nova-muted">Upload a branded 1080×1920 background image to Supabase Storage and paste the URL below to override the solid color.</p>
+              </div>
+            </div>
+            <p className="text-xs font-mono text-nova-muted/60 mt-3">
+              Once HeyGen exposes their Brand API, NOVA will use brand_id directly — no changes needed on your end.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Per-show config */}
       {shows.map(show => {
         const color = SHOW_COLORS[show.show_name] ?? '#C9A84C'
         const edit  = edits[show.id] ?? { voice_id: '', avatar_id: '', heygen_voice_id: '', description: '', background_url: '' }
         const mode  = edit.heygen_voice_id.trim() ? 'A' : edit.voice_id.trim() ? 'B' : null
-        const hasBg = edit.background_url.trim().length > 0
-
+        const hasBg = Boolean(edit.background_url.trim())
         return (
           <div key={show.id} className="nova-card space-y-4">
             <div className="flex items-center justify-between">
@@ -139,20 +131,15 @@ export default function Settings() {
                   <p className="text-xs font-mono" style={{ color }}>{show.day_of_week}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {hasBg && (
-                  <span className="nova-badge bg-nova-violet/20 text-nova-violet">
-                    <Image size={9} className="inline mr-1" />Brand BG
-                  </span>
-                )}
-                <span className={`nova-badge ${
-                  mode === 'A' ? 'bg-nova-teal/20 text-nova-teal' :
-                  mode === 'B' ? 'bg-nova-border/60 text-nova-muted' :
-                  'bg-nova-crimson/20 text-nova-crimson'
-                }`}>
-                  {mode === 'A' ? '⚡ Mode A' : mode === 'B' ? 'Mode B' : '⚠ Needs voice'}
-                </span>
-              </div>
+              <span className={`nova-badge ${
+                mode === 'A' ? 'bg-nova-teal/20 text-nova-teal' :
+                mode === 'B' ? 'bg-nova-border/60 text-nova-muted' :
+                'bg-nova-crimson/20 text-nova-crimson'
+              }`}>
+                {mode === 'A' ? '⚡ Mode A — HeyGen' :
+                 mode === 'B' ? 'Mode B — ElevenLabs' :
+                 '⚠ Needs voice config'}
+              </span>
             </div>
 
             <div>
@@ -161,36 +148,7 @@ export default function Settings() {
                 placeholder="Short show description…" className="nova-input" />
             </div>
 
-            {/* Brand background */}
-            <div>
-              <label className="block text-xs font-mono text-nova-muted mb-1.5 uppercase tracking-widest flex items-center gap-1.5">
-                <Image size={11} />
-                Brand Background URL <span className="text-nova-violet">(optional)</span>
-              </label>
-              <div className="flex gap-2">
-                <input
-                  value={edit.background_url}
-                  onChange={e => update(show.id, 'background_url', e.target.value)}
-                  placeholder="https://vzzzqsmqqaoilkmskadl.supabase.co/storage/v1/object/public/newsletter-assets/ai-shows/brands/..."
-                  className="nova-input font-mono text-xs flex-1"
-                />
-                {hasBg && (
-                  <a href={edit.background_url} target="_blank" rel="noreferrer"
-                    className="px-3 py-2 rounded-lg border border-nova-border/50 text-nova-muted hover:text-white hover:border-nova-violet/40 transition-colors">
-                    <ExternalLink size={14} />
-                  </a>
-                )}
-              </div>
-              {!hasBg && (
-                <p className="text-xs font-mono text-nova-muted mt-1">
-                  No URL set — will use show color&nbsp;
-                  <span className="inline-block w-2.5 h-2.5 rounded-full align-middle" style={{ backgroundColor: color }} />
-                  &nbsp;{color}
-                </p>
-              )}
-            </div>
-
-            {/* HeyGen IDs */}
+            {/* HeyGen */}
             <div>
               <p className="text-xs font-mono text-nova-teal mb-2 uppercase tracking-widest flex items-center gap-1.5">
                 <Zap size={11} /> HeyGen
@@ -202,7 +160,7 @@ export default function Settings() {
                   </label>
                   <input value={edit.heygen_voice_id}
                     onChange={e => update(show.id, 'heygen_voice_id', e.target.value)}
-                    placeholder="e.g. 27dd6930bc04…"
+                    placeholder="e.g. 27dd6930bc0444fb…"
                     className="nova-input font-mono text-xs" />
                 </div>
                 <div>
@@ -211,21 +169,40 @@ export default function Settings() {
                   </label>
                   <input value={edit.avatar_id}
                     onChange={e => update(show.id, 'avatar_id', e.target.value)}
-                    placeholder="e.g. 1244e891015a…"
+                    placeholder="e.g. 1244e891015a4e79…"
                     className="nova-input font-mono text-xs" />
                 </div>
               </div>
             </div>
 
-            {/* ElevenLabs fallback */}
+            {/* ElevenLabs */}
             <div>
-              <label className="block text-xs font-mono text-nova-muted mb-1.5 uppercase tracking-widest">
+              <p className="text-xs font-mono text-nova-muted mb-2 uppercase tracking-widest">
                 ElevenLabs Voice ID (Mode B fallback)
-              </label>
+              </p>
               <input value={edit.voice_id}
                 onChange={e => update(show.id, 'voice_id', e.target.value)}
                 placeholder="e.g. 21m00Tcm4TlvDq8ikWAM"
                 className="nova-input font-mono text-xs" />
+            </div>
+
+            {/* Brand background */}
+            <div>
+              <p className="text-xs font-mono text-nova-violet mb-2 uppercase tracking-widest flex items-center gap-1.5">
+                <ImageIcon size={11} /> TTN Brand Background
+              </p>
+              <div className="flex items-center gap-3 p-3 rounded-lg border border-nova-border/50 bg-nova-navydark/40 mb-2">
+                <div className="w-8 h-8 rounded shrink-0 border border-nova-border" style={{ backgroundColor: color }} />
+                <div className="text-xs font-body text-nova-muted">
+                  <p className="text-white font-semibold">Auto: {color} background</p>
+                  <p>This show's brand color is used automatically. Paste a URL below to use a custom branded image instead.</p>
+                </div>
+              </div>
+              <input value={edit.background_url}
+                onChange={e => update(show.id, 'background_url', e.target.value)}
+                placeholder="https://… (1080×1920 branded background image URL — optional)"
+                className={`nova-input font-mono text-xs ${hasBg ? 'border-nova-violet/50' : ''}`} />
+              {hasBg && <p className="text-xs font-mono text-nova-violet mt-1">✓ Custom background active</p>}
             </div>
 
             <div className="flex justify-end">
