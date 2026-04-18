@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Save, CheckCircle, Zap } from 'lucide-react'
+import { Loader2, Save, CheckCircle, Zap, Image, ExternalLink } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ShowConfig } from '../types'
 
@@ -13,7 +13,8 @@ const SHOW_COLORS: Record<string, string> = {
 export default function Settings() {
   const [shows, setShows]   = useState<ShowConfig[]>([])
   const [edits, setEdits]   = useState<Record<string, {
-    voice_id: string; avatar_id: string; heygen_voice_id: string; description: string
+    voice_id: string; avatar_id: string; heygen_voice_id: string;
+    description: string; background_url: string;
   }>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved]   = useState<string | null>(null)
@@ -30,6 +31,7 @@ export default function Settings() {
           avatar_id:       show.avatar_id       ?? '',
           heygen_voice_id: show.heygen_voice_id ?? '',
           description:     show.description     ?? '',
+          background_url:  show.background_url  ?? '',
         }
       }
       setEdits(init)
@@ -41,16 +43,12 @@ export default function Settings() {
     setEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
   }
 
-  function getMode(edit: { heygen_voice_id: string; voice_id: string; avatar_id: string }) {
-    if (edit.heygen_voice_id.trim()) return 'A'
-    if (edit.voice_id.trim())        return 'B'
-    if (edit.avatar_id.trim())       return 'C'
-    return null
-  }
-
   async function saveShow(show: ShowConfig) {
     setSaving(show.id)
-    const { error } = await supabase.from('show_configs').update(edits[show.id]).eq('id', show.id)
+    const { error } = await supabase
+      .from('show_configs')
+      .update(edits[show.id])
+      .eq('id', show.id)
     setSaving(null)
     if (!error) { setSaved(show.id); setTimeout(() => setSaved(null), 2500) }
   }
@@ -65,64 +63,72 @@ export default function Settings() {
     <div className="space-y-8 animate-fade-in max-w-3xl">
       <div>
         <h1 className="font-display text-3xl text-white tracking-wide mb-1">Settings</h1>
-        <p className="text-sm font-body text-nova-muted">Configure voice and avatar for each show.</p>
+        <p className="text-sm font-body text-nova-muted">
+          Configure voice, avatar, and brand background for each show.
+        </p>
       </div>
 
-      {/* Three modes */}
-      <div className="nova-card border-nova-gold/20">
-        <h2 className="font-display text-nova-gold text-lg tracking-wide mb-3">How NOVA picks your voice</h2>
-        <div className="grid sm:grid-cols-3 gap-3 text-sm font-body">
-          <div className="p-3 rounded-lg border border-nova-teal/30 bg-nova-teal/5">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Zap size={12} className="text-nova-teal" />
-              <span className="text-nova-teal font-semibold text-xs uppercase tracking-wide">Mode C — Recommended</span>
-            </div>
-            <p className="text-white font-semibold mb-0.5">Instant Avatar</p>
-            <p className="text-nova-muted text-xs leading-relaxed">
-              Your HeyGen Instant Avatar already has your voice baked in. <strong className="text-white">No voice ID needed.</strong> Just paste your Avatar ID and go.
+      {/* Brand background info */}
+      <div className="nova-card border-nova-violet/20">
+        <div className="flex items-start gap-3">
+          <Image size={18} className="text-nova-violet mt-0.5 shrink-0" />
+          <div>
+            <h2 className="font-display text-nova-violet text-lg tracking-wide mb-2">Brand Background</h2>
+            <p className="text-sm font-body text-nova-muted leading-relaxed mb-3">
+              HeyGen's Brand System isn't accessible via API, but NOVA supports a custom branded
+              background image per show. Upload your TTN-branded background to Supabase Storage and paste
+              the public URL below. Without a URL, NOVA uses the show's accent color.
             </p>
-          </div>
-          <div className="p-3 rounded-lg border border-nova-border/50 bg-nova-navydark/30">
-            <span className="text-nova-muted text-xs uppercase tracking-wide">Mode A</span>
-            <p className="text-white font-semibold mb-0.5 mt-0.5">HeyGen Voice ID</p>
-            <p className="text-nova-muted text-xs leading-relaxed">
-              If HeyGen assigns a separate voice ID to your clone (rare for Instant Avatars), paste it here.
-            </p>
-          </div>
-          <div className="p-3 rounded-lg border border-nova-border/50 bg-nova-navydark/30">
-            <span className="text-nova-muted text-xs uppercase tracking-wide">Mode B</span>
-            <p className="text-white font-semibold mb-0.5 mt-0.5">ElevenLabs</p>
-            <p className="text-nova-muted text-xs leading-relaxed">
-              Generates audio via ElevenLabs, then passes it to HeyGen. Two API calls.
+            <a
+              href="https://supabase.com/dashboard/project/vzzzqsmqqaoilkmskadl/storage/buckets/newsletter-assets"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-mono text-nova-teal hover:underline"
+            >
+              <ExternalLink size={11} />
+              Open Supabase Storage → newsletter-assets
+            </a>
+            <p className="text-xs font-mono text-nova-muted mt-1.5">
+              Upload to path: <span className="text-white">ai-shows/brands/show_name.jpg</span>
+              &nbsp;→ copy the public URL → paste below
             </p>
           </div>
         </div>
-        <p className="text-xs font-mono text-nova-muted mt-3 border-t border-nova-border pt-3">
-          Priority: Mode A → Mode B → Mode C. If only Avatar ID is set, Mode C runs automatically.
+      </div>
+
+      {/* Voice mode info */}
+      <div className="nova-card border-nova-gold/20">
+        <h2 className="font-display text-nova-gold text-lg tracking-wide mb-3">Voice modes</h2>
+        <div className="grid sm:grid-cols-2 gap-4 text-sm font-body">
+          <div className="p-3 rounded-lg border border-nova-teal/30 bg-nova-teal/5">
+            <div className="flex items-center gap-2 mb-1">
+              <Zap size={14} className="text-nova-teal" />
+              <p className="text-nova-teal font-semibold text-xs tracking-wide uppercase">Mode A — Preferred</p>
+            </div>
+            <p className="text-white font-semibold mb-1">HeyGen Voice ID</p>
+            <p className="text-nova-muted text-xs leading-relaxed">
+              HeyGen built-in voice clone. One API call — voice and avatar together. Best sync.
+            </p>
+          </div>
+          <div className="p-3 rounded-lg border border-nova-border bg-nova-navydark/40">
+            <p className="text-nova-muted text-xs tracking-wide uppercase font-mono mb-1">Mode B — Fallback</p>
+            <p className="text-white font-semibold mb-1">ElevenLabs Voice ID</p>
+            <p className="text-nova-muted text-xs leading-relaxed">
+              ElevenLabs audio → HeyGen avatar. Two API calls.
+            </p>
+          </div>
+        </div>
+        <p className="text-xs font-mono text-nova-muted mt-3">
+          HeyGen Voice ID set → Mode A used automatically.
         </p>
       </div>
 
-      {/* How to get Avatar ID */}
-      <div className="nova-card">
-        <h2 className="font-display text-white text-lg tracking-wide mb-2">Where to find your Avatar ID</h2>
-        <p className="text-sm font-body text-nova-muted">
-          Go to <a href="https://app.heygen.com/avatars" target="_blank" rel="noreferrer" className="text-nova-teal hover:underline">app.heygen.com/avatars</a> → click your Instant Avatar → copy the avatar ID shown in the URL or detail panel. It starts with a UUID-style string (e.g. <span className="font-mono text-white/60">1244e891015a…</span>).
-        </p>
-      </div>
-
-      {/* Show configs */}
       {shows.map(show => {
         const color = SHOW_COLORS[show.show_name] ?? '#C9A84C'
-        const edit  = edits[show.id] ?? { voice_id: '', avatar_id: '', heygen_voice_id: '', description: '' }
-        const mode  = getMode(edit)
-        const modeText = mode === 'A' ? '⚡ Mode A — HeyGen voice'
-                       : mode === 'B' ? 'Mode B — ElevenLabs'
-                       : mode === 'C' ? '🎙 Mode C — Instant Avatar'
-                       : '⚠ No avatar configured'
-        const badgeCls = mode === 'A' ? 'bg-nova-teal/20 text-nova-teal'
-                       : mode === 'C' ? 'bg-nova-teal/20 text-nova-teal'
-                       : mode === 'B' ? 'bg-nova-border/60 text-nova-muted'
-                       : 'bg-nova-crimson/20 text-nova-crimson'
+        const edit  = edits[show.id] ?? { voice_id: '', avatar_id: '', heygen_voice_id: '', description: '', background_url: '' }
+        const mode  = edit.heygen_voice_id.trim() ? 'A' : edit.voice_id.trim() ? 'B' : null
+        const hasBg = edit.background_url.trim().length > 0
+
         return (
           <div key={show.id} className="nova-card space-y-4">
             <div className="flex items-center justify-between">
@@ -133,7 +139,20 @@ export default function Settings() {
                   <p className="text-xs font-mono" style={{ color }}>{show.day_of_week}</p>
                 </div>
               </div>
-              <span className={`nova-badge ${badgeCls}`}>{modeText}</span>
+              <div className="flex items-center gap-2">
+                {hasBg && (
+                  <span className="nova-badge bg-nova-violet/20 text-nova-violet">
+                    <Image size={9} className="inline mr-1" />Brand BG
+                  </span>
+                )}
+                <span className={`nova-badge ${
+                  mode === 'A' ? 'bg-nova-teal/20 text-nova-teal' :
+                  mode === 'B' ? 'bg-nova-border/60 text-nova-muted' :
+                  'bg-nova-crimson/20 text-nova-crimson'
+                }`}>
+                  {mode === 'A' ? '⚡ Mode A' : mode === 'B' ? 'Mode B' : '⚠ Needs voice'}
+                </span>
+              </div>
             </div>
 
             <div>
@@ -142,47 +161,72 @@ export default function Settings() {
                 placeholder="Short show description…" className="nova-input" />
             </div>
 
-            {/* Avatar ID — required */}
+            {/* Brand background */}
             <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <label className="text-xs font-mono text-white uppercase tracking-widest">HeyGen Avatar ID</label>
-                <span className="text-xs font-mono text-nova-teal">(required)</span>
+              <label className="block text-xs font-mono text-nova-muted mb-1.5 uppercase tracking-widest flex items-center gap-1.5">
+                <Image size={11} />
+                Brand Background URL <span className="text-nova-violet">(optional)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  value={edit.background_url}
+                  onChange={e => update(show.id, 'background_url', e.target.value)}
+                  placeholder="https://vzzzqsmqqaoilkmskadl.supabase.co/storage/v1/object/public/newsletter-assets/ai-shows/brands/..."
+                  className="nova-input font-mono text-xs flex-1"
+                />
+                {hasBg && (
+                  <a href={edit.background_url} target="_blank" rel="noreferrer"
+                    className="px-3 py-2 rounded-lg border border-nova-border/50 text-nova-muted hover:text-white hover:border-nova-violet/40 transition-colors">
+                    <ExternalLink size={14} />
+                  </a>
+                )}
               </div>
-              <input value={edit.avatar_id}
-                onChange={e => update(show.id, 'avatar_id', e.target.value)}
-                placeholder="e.g. 1244e891015a471fa2a5… (from app.heygen.com/avatars)"
-                className="nova-input font-mono text-xs" />
-              <p className="text-xs text-nova-muted mt-1 font-body">
-                If this is an Instant Avatar, you don't need to fill in any voice field — your voice is already inside.
-              </p>
+              {!hasBg && (
+                <p className="text-xs font-mono text-nova-muted mt-1">
+                  No URL set — will use show color&nbsp;
+                  <span className="inline-block w-2.5 h-2.5 rounded-full align-middle" style={{ backgroundColor: color }} />
+                  &nbsp;{color}
+                </p>
+              )}
             </div>
 
-            {/* Optional voice overrides */}
-            <details className="group">
-              <summary className="cursor-pointer text-xs font-mono text-nova-muted hover:text-white transition-colors py-1 select-none">
-                ▸ Optional voice overrides (only needed if you have a separate voice ID)
-              </summary>
-              <div className="mt-3 space-y-3">
+            {/* HeyGen IDs */}
+            <div>
+              <p className="text-xs font-mono text-nova-teal mb-2 uppercase tracking-widest flex items-center gap-1.5">
+                <Zap size={11} /> HeyGen
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-mono text-nova-muted mb-1.5 uppercase tracking-widest">
-                    HeyGen Voice ID <span className="text-nova-muted normal-case">(Mode A — rare for Instant Avatars)</span>
+                    HeyGen Voice ID <span className="text-nova-teal">(Mode A)</span>
                   </label>
                   <input value={edit.heygen_voice_id}
                     onChange={e => update(show.id, 'heygen_voice_id', e.target.value)}
-                    placeholder="Leave blank — Instant Avatars don't need this"
+                    placeholder="e.g. 27dd6930bc04…"
                     className="nova-input font-mono text-xs" />
                 </div>
                 <div>
                   <label className="block text-xs font-mono text-nova-muted mb-1.5 uppercase tracking-widest">
-                    ElevenLabs Voice ID <span className="text-nova-muted normal-case">(Mode B fallback)</span>
+                    HeyGen Avatar ID
                   </label>
-                  <input value={edit.voice_id}
-                    onChange={e => update(show.id, 'voice_id', e.target.value)}
-                    placeholder="Leave blank if using HeyGen avatar"
+                  <input value={edit.avatar_id}
+                    onChange={e => update(show.id, 'avatar_id', e.target.value)}
+                    placeholder="e.g. 1244e891015a…"
                     className="nova-input font-mono text-xs" />
                 </div>
               </div>
-            </details>
+            </div>
+
+            {/* ElevenLabs fallback */}
+            <div>
+              <label className="block text-xs font-mono text-nova-muted mb-1.5 uppercase tracking-widest">
+                ElevenLabs Voice ID (Mode B fallback)
+              </label>
+              <input value={edit.voice_id}
+                onChange={e => update(show.id, 'voice_id', e.target.value)}
+                placeholder="e.g. 21m00Tcm4TlvDq8ikWAM"
+                className="nova-input font-mono text-xs" />
+            </div>
 
             <div className="flex justify-end">
               <button onClick={() => saveShow(show)} disabled={saving === show.id}
