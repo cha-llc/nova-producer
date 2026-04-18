@@ -226,6 +226,7 @@ export default function Episodes() {
                     onStop={ep.status === 'generating' ? handleStop : undefined}
                     onDelete={handleDelete}
                     onSchedule={ep.status === 'complete' ? (e) => setScheduleEp(e) : undefined}
+                  onRegenerate={() => load()}
                   />
                 ))}
               </div>
