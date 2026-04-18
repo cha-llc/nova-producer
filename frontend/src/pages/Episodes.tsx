@@ -304,12 +304,12 @@ export default function Episodes() {
       )}
     </div>
 
-      {scheduleEp && (
-        <ScheduleModal
-          episode={scheduleEp}
-          onClose={() => setScheduleEp(null)}
-          onScheduled={() => { setScheduleEp(null); load() }}
-        />
-      )}
+    {scheduleEp && (
+      <ScheduleModal
+        episode={scheduleEp}
+        onClose={() => setScheduleEp(null)}
+        onScheduled={() => { setScheduleEp(null); load() }}
+      />
+    )}
   )
 }
