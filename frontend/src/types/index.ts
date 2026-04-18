@@ -4,7 +4,7 @@ export type ShowName =
   | 'tea_time_with_cj'
   | 'confession_court'
 
-export type ScriptStatus = 'draft' | 'ready' | 'processing' | 'done' | 'failed'
+export type ScriptStatus = 'draft' | 'ready' | 'processing' | 'done' | 'failed' | 'scripting'
 export type EpisodeStatus = 'generating' | 'processing' | 'complete' | 'failed' | 'cancelled'
 export type EpisodeSource = 'nova' | 'heygen_studio'
 
