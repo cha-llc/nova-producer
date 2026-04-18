@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Mic, Upload, Loader2, Check, Trash2, Star, Play, AlertCircle, 
-         RefreshCw, PlusCircle, Volume2, AudioWaveform } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { Mic, Loader2, Check, Play, AlertCircle, RefreshCw, PlusCircle, Volume2 } from 'lucide-react'
 import type { NovaVoiceClone } from '../types'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
@@ -22,10 +20,10 @@ export default function Voice() {
   const [error, setError]         = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [form, setForm] = useState({ name: '', description: '', audioUrls: '' })
-  const [assignShow, setAssignShow] = useState('')
+  const [assignShow, setAssignShow]   = useState('')
   const [assignVoice, setAssignVoice] = useState('')
-  const [assigning, setAssigning] = useState(false)
-  const [assignMsg, setAssignMsg] = useState('')
+  const [assigning, setAssigning]     = useState(false)
+  const [assignMsg, setAssignMsg]     = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -64,16 +62,20 @@ export default function Voice() {
     if (!form.name || !form.audioUrls.trim()) return
     setCreating(true); setError('')
     try {
-      const urls = form.audioUrls.split('
-').map(u => u.trim()).filter(Boolean)
+      const urls = form.audioUrls.split('\n').map(u => u.trim()).filter(Boolean)
       const r = await fetch(`${VOICE_CLONE_URL}?action=create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: form.name, description: form.description, audio_urls: urls }),
       })
       const d = await r.json()
-      if (d.success) { setShowCreateForm(false); setForm({ name:'', description:'', audioUrls:'' }); load() }
-      else setError(d.error || 'Clone creation failed')
+      if (d.success) {
+        setShowCreateForm(false)
+        setForm({ name: '', description: '', audioUrls: '' })
+        load()
+      } else {
+        setError(d.error || 'Clone creation failed')
+      }
     } catch (e) { setError(String(e)) }
     setCreating(false)
   }
@@ -88,7 +90,7 @@ export default function Voice() {
         body: JSON.stringify({ show_name: assignShow, voice_id: assignVoice }),
       })
       const d = await r.json()
-      if (d.success) setAssignMsg(`✅ Assigned to ${assignShow.replace(/_/g,' ')}`)
+      if (d.success) setAssignMsg('Assigned to ' + assignShow.replace(/_/g, ' '))
       else setError(d.error || 'Assignment failed')
     } catch (e) { setError(String(e)) }
     setAssigning(false)
@@ -104,7 +106,7 @@ export default function Voice() {
             <Mic size={28} className="text-nova-teal" /> VOICE STUDIO
           </h1>
           <p className="text-sm font-mono text-nova-muted mt-1">
-            Clone your voice · Manage ElevenLabs voices · Assign to shows
+            Clone your voice and assign it to any show
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -123,39 +125,36 @@ export default function Voice() {
         </div>
       )}
 
-      {/* Create clone form */}
       {showCreateForm && (
         <div className="nova-card border border-nova-teal/30">
           <h3 className="font-display text-lg text-nova-teal mb-4 flex items-center gap-2">
-            <AudioWaveform size={18} /> Clone Your Voice
+            <Mic size={18} /> Clone Your Voice
           </h3>
           <p className="text-xs font-mono text-nova-muted mb-4">
-            Provide 3-5 audio samples of your voice (public URLs from Supabase Storage or any hosted audio).
-            Each sample should be 30s–3min of clean speech. More samples = better clone.
+            Provide 3-5 audio samples of your voice as public URLs from Supabase Storage or any hosted audio.
+            Each sample should be 30s to 3min of clean speech. More samples means a better clone.
           </p>
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-mono text-nova-muted mb-1">Clone Name *</label>
-              <input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))}
-                className="nova-input w-full" placeholder="CJ H. Adisa — NOVA Voice" />
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                className="nova-input w-full" placeholder="CJ H. Adisa NOVA Voice" />
             </div>
             <div>
               <label className="block text-xs font-mono text-nova-muted mb-1">Description</label>
-              <input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))}
-                className="nova-input w-full" placeholder="CJ's voice for Tea Time Network shows" />
+              <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                className="nova-input w-full" placeholder="CJ voice for Tea Time Network shows" />
             </div>
             <div>
               <label className="block text-xs font-mono text-nova-muted mb-1">Audio URLs (one per line) *</label>
-              <textarea value={form.audioUrls} onChange={e => setForm(f => ({...f, audioUrls: e.target.value}))}
+              <textarea value={form.audioUrls} onChange={e => setForm(f => ({ ...f, audioUrls: e.target.value }))}
                 className="nova-input w-full h-28 resize-none"
-                placeholder={"https://storage.supabase.co/.../sample1.mp3
-https://storage.supabase.co/.../sample2.mp3"} />
+                placeholder="https://your-storage.supabase.co/.../sample1.mp3" />
             </div>
             <div className="flex items-center gap-2">
               <button onClick={createClone} disabled={creating || !form.name || !form.audioUrls.trim()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-nova-teal text-white text-sm font-body
-                           hover:bg-nova-teal/80 disabled:opacity-50 transition-all">
-                {creating ? <><Loader2 size={14} className="animate-spin" /> Creating Clone…</> : <><Mic size={14} /> Create Voice Clone</>}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-nova-teal text-white text-sm font-body hover:bg-nova-teal/80 disabled:opacity-50 transition-all">
+                {creating ? <><Loader2 size={14} className="animate-spin" /> Creating Clone...</> : <><Mic size={14} /> Create Voice Clone</>}
               </button>
               <button onClick={() => setShowCreateForm(false)} className="nova-btn-ghost text-sm">Cancel</button>
             </div>
@@ -163,7 +162,6 @@ https://storage.supabase.co/.../sample2.mp3"} />
         </div>
       )}
 
-      {/* Assign voice to show */}
       <div className="nova-card">
         <h3 className="font-display text-base text-white mb-3 flex items-center gap-2">
           <Volume2 size={15} className="text-nova-gold" /> Assign Voice to Show
@@ -172,20 +170,19 @@ https://storage.supabase.co/.../sample2.mp3"} />
           <div>
             <label className="block text-xs font-mono text-nova-muted mb-1">Show</label>
             <select value={assignShow} onChange={e => setAssignShow(e.target.value)} className="nova-input">
-              <option value="">Select show…</option>
-              {SHOW_NAMES.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+              <option value="">Select show...</option>
+              {SHOW_NAMES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-mono text-nova-muted mb-1">Voice ID</label>
             <select value={assignVoice} onChange={e => setAssignVoice(e.target.value)} className="nova-input min-w-48">
-              <option value="">Select voice…</option>
+              <option value="">Select voice...</option>
               {allVoices.map(v => <option key={v.voice_id} value={v.voice_id}>{v.name} ({v.category})</option>)}
             </select>
           </div>
           <button onClick={assignToShow} disabled={assigning || !assignShow || !assignVoice}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-nova-gold text-nova-navy text-sm font-body
-                       hover:bg-nova-gold/80 disabled:opacity-50 transition-all">
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-nova-gold text-nova-navy text-sm font-body hover:bg-nova-gold/80 disabled:opacity-50 transition-all">
             {assigning ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             Assign
           </button>
@@ -195,11 +192,10 @@ https://storage.supabase.co/.../sample2.mp3"} />
 
       {loading ? (
         <div className="flex items-center gap-2 text-nova-muted text-sm py-8">
-          <Loader2 size={14} className="animate-spin" /> Loading voices…
+          <Loader2 size={14} className="animate-spin" /> Loading voices...
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Cloned voices */}
           <div className="space-y-3">
             <p className="text-xs font-mono text-nova-muted uppercase tracking-widest flex items-center gap-2">
               <Mic size={11} /> Your Cloned Voices ({elVoices.length})
@@ -208,7 +204,7 @@ https://storage.supabase.co/.../sample2.mp3"} />
               <div className="nova-card text-center py-8">
                 <Mic size={24} className="text-nova-muted/40 mx-auto mb-2" />
                 <p className="text-sm font-mono text-nova-muted">No voice clones yet.</p>
-                <p className="text-xs font-mono text-nova-muted mt-1">Click "Clone Your Voice" to get started.</p>
+                <p className="text-xs font-mono text-nova-muted mt-1">Click Clone Your Voice to get started.</p>
               </div>
             ) : elVoices.map(v => (
               <div key={v.voice_id} className="nova-card border border-nova-teal/20">
@@ -224,8 +220,7 @@ https://storage.supabase.co/.../sample2.mp3"} />
                 </div>
                 <div className="flex items-center gap-2 mt-3">
                   <button onClick={() => testVoice(v.voice_id)} disabled={testing === v.voice_id}
-                    className="flex items-center gap-1.5 text-xs font-mono text-nova-muted border border-nova-border/50 px-3 py-1.5 rounded-lg
-                               hover:text-nova-teal hover:border-nova-teal/40 transition-all disabled:opacity-40">
+                    className="flex items-center gap-1.5 text-xs font-mono text-nova-muted border border-nova-border/50 px-3 py-1.5 rounded-lg hover:text-nova-teal hover:border-nova-teal/40 transition-all disabled:opacity-40">
                     {testing === v.voice_id ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
                     Test Voice
                   </button>
@@ -237,13 +232,12 @@ https://storage.supabase.co/.../sample2.mp3"} />
             ))}
           </div>
 
-          {/* Standard voices */}
           <div className="space-y-3">
             <p className="text-xs font-mono text-nova-muted uppercase tracking-widest flex items-center gap-2">
               <Volume2 size={11} /> Standard Voices ({stdVoices.length})
             </p>
             <div className="max-h-96 overflow-y-auto space-y-2">
-              {stdVoices.slice(0,15).map(v => (
+              {stdVoices.slice(0, 15).map(v => (
                 <div key={v.voice_id} className="nova-card py-2 flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-body text-white">{v.name}</p>
