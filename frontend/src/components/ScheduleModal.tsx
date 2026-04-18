@@ -38,7 +38,6 @@ interface Props {
 }
 
 function nextOccurrence(dayOfWeek: number, hourCST: number): Date {
-  // CST = UTC-6
   const now = new Date()
   const d   = new Date(now)
   d.setUTCHours(hourCST + 6, 0, 0, 0)
@@ -49,30 +48,42 @@ function nextOccurrence(dayOfWeek: number, hourCST: number): Date {
 }
 
 function toLocalInputs(date: Date) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  const h = String(date.getHours()).padStart(2, '0')
+  const y  = date.getFullYear()
+  const m  = String(date.getMonth() + 1).padStart(2, '0')
+  const d  = String(date.getDate()).padStart(2, '0')
+  const h  = String(date.getHours()).padStart(2, '0')
   const mi = String(date.getMinutes()).padStart(2, '0')
   return { date: `${y}-${m}-${d}`, time: `${h}:${mi}` }
 }
 
 export default function ScheduleModal({ episode, onClose, onScheduled }: Props) {
-  const [platforms, setPlatforms] = useState<number[]>(PLATFORMS.map(p => p.id))
-  const [date, setDate]           = useState('')
-  const [time, setTime]           = useState('')
-  const [caption, setCaption]     = useState('')
-  const [partTitle, setPartTitle] = useState('')
+  const [platforms, setPlatforms]   = useState<number[]>(PLATFORMS.map(p => p.id))
+  const [date, setDate]             = useState('')
+  const [time, setTime]             = useState('')
+  const [caption, setCaption]       = useState('')
+  const [partTitle, setPartTitle]   = useState('')
   const [seriesPart, setSeriesPart] = useState<number | null>(null)
   const [scheduling, setScheduling] = useState(false)
   const [result, setResult]         = useState<Record<string, string> | null>(null)
   const [recommendation, setRec]    = useState('')
 
   const showColor = SHOW_COLOR[episode.show_name] ?? '#C9A84C'
-  const showLabel = episode.show_name.replace(/_/g, ' ').replace(/\w/g, c => c.toUpperCase())
+  const showLabel = episode.show_name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+
+  // BUG FIX: pass part directly to avoid reading stale seriesPart state from closure
+  function recommend(part: number | null = seriesPart) {
+    const showDay = SHOW_DAYS[episode.show_name] ?? 0
+    const hourCST = part === 0 ? 18 : 8
+    const next    = nextOccurrence(showDay, hourCST)
+    const { date: d, time: t } = toLocalInputs(next)
+    setDate(d)
+    setTime(t)
+    const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][next.getUTCDay()]
+    const label   = part === 0 ? 'show opening time (6pm CST)' : 'optimal clip time (8am CST)'
+    setRec(`Best for ${showLabel}: ${dayName} ${d} at ${t} — ${label}`)
+  }
 
   useEffect(() => {
-    // Load script info
     if (episode.script_id) {
       supabase.from('show_scripts')
         .select('caption,part_title,series_part,post_date,post_time_utc')
@@ -82,8 +93,8 @@ export default function ScheduleModal({ episode, onClose, onScheduled }: Props) 
           if (data) {
             setCaption(data.caption ?? '')
             setPartTitle(data.part_title ?? '')
-            setSeriesPart(data.series_part ?? null)
-            // Pre-fill with scheduled post_date if it exists
+            const part = data.series_part ?? null
+            setSeriesPart(part)
             if (data.post_date) {
               const postUtc = data.post_time_utc ?? '13:00'
               const dt = new Date(`${data.post_date}T${postUtc}:00Z`)
@@ -92,29 +103,17 @@ export default function ScheduleModal({ episode, onClose, onScheduled }: Props) 
               setTime(t)
               setRec(`Suggested from your content calendar: ${data.post_date} at ${postUtc} UTC`)
             } else {
-              recommend()
+              // Pass part directly — don't read from state (stale closure fix)
+              recommend(part)
             }
           } else {
-            recommend()
+            recommend(null)
           }
         })
     } else {
-      recommend()
+      recommend(null)
     }
   }, [])
-
-  function recommend() {
-    const showDay = SHOW_DAYS[episode.show_name] ?? 0
-    // Series clips post at 8am CST (14:00 UTC), show openings at 6pm CST (00:00 UTC+1)
-    const hourCST = seriesPart === 0 ? 18 : 8
-    const next = nextOccurrence(showDay, hourCST)
-    const { date: d, time: t } = toLocalInputs(next)
-    setDate(d)
-    setTime(t)
-    const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][next.getUTCDay()]
-    const label = seriesPart === 0 ? 'show opening time (6pm CST)' : 'optimal clip time (8am CST)'
-    setRec(`Best for ${showLabel}: ${dayName} ${d} at ${t} — ${label}`)
-  }
 
   function togglePlatform(id: number) {
     setPlatforms(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id])
@@ -200,7 +199,7 @@ export default function ScheduleModal({ episode, onClose, onScheduled }: Props) 
           </div>
 
           {/* Recommend button */}
-          <button onClick={recommend}
+          <button onClick={() => recommend()}
             style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 12px', borderRadius:'var(--border-radius-md)', border:'0.5px solid var(--color-border-tertiary)', background:'var(--color-background-secondary)', cursor:'pointer', fontSize:'12px', color:'var(--color-text-secondary)', textAlign:'left' }}>
             <Sparkles size={13} style={{ color:showColor, flexShrink:0 }} />
             <span style={{ flex:1, lineHeight:1.4 }}>{recommendation || 'Click to get recommended time'}</span>
