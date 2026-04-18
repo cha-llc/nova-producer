@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, Filter, Library, Tv, AlertTriangle } from 'lucide-react'
+import ScheduleModal from '../components/ScheduleModal'
 import { supabase } from '../lib/supabase'
 import EpisodeCard, { HeyGenLibraryCard } from '../components/EpisodeCard'
 import type { AiEpisode, EpisodeStatus, HeyGenVideo } from '../types'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+
 const PROXY_URL    = `${SUPABASE_URL}/functions/v1/heygen-proxy`
 
 const SHOWS = [
