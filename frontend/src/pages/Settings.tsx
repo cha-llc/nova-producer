@@ -1,10 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Settings2, Save, Loader2, Check, AlertCircle, Brain, Image, Mic, 
-         Key, ExternalLink, Info, BookOpen } from 'lucide-react'
+import { Settings2, Save, Loader2, Check, Key, ExternalLink, Info, BookOpen, Brain, Mic } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ShowConfig, NovaStyleProfile } from '../types'
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
 const SHOW_COLORS: Record<string, string> = {
   sunday_power_hour: '#C9A84C',
@@ -13,7 +10,7 @@ const SHOW_COLORS: Record<string, string> = {
   confession_court:  '#C1121F',
 }
 
-type Tab = 'shows' | 'voice' | 'style' | 'apis'
+type Tab = 'shows' | 'style' | 'voice' | 'apis'
 
 export default function Settings() {
   const [shows, setShows]       = useState<ShowConfig[]>([])
@@ -22,7 +19,7 @@ export default function Settings() {
   const [saving, setSaving]     = useState<string | null>(null)
   const [saved, setSaved]       = useState<string | null>(null)
   const [tab, setTab]           = useState<Tab>('shows')
-  const [editConfig, setEditConfig] = useState<Record<string, Partial<ShowConfig>>>({})
+  const [editConfig, setEditConfig]   = useState<Record<string, Partial<ShowConfig>>>({})
   const [editProfile, setEditProfile] = useState<Record<string, Partial<NovaStyleProfile>>>({})
 
   const load = useCallback(async () => {
@@ -74,16 +71,15 @@ export default function Settings() {
 
   const getProfile = (profile: NovaStyleProfile, field: keyof NovaStyleProfile): string => {
     const val = editProfile[profile.show_name]?.[field] ?? profile[field]
-    if (Array.isArray(val)) return val.join('
-')
+    if (Array.isArray(val)) return val.join('\n')
     return String(val ?? '')
   }
 
   const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
-    { key: 'shows',  label: 'Show Config',  icon: Settings2 },
-    { key: 'style',  label: 'Style Profiles', icon: Brain },
-    { key: 'voice',  label: 'Voice & Avatar', icon: Mic },
-    { key: 'apis',   label: 'API Keys',      icon: Key },
+    { key: 'shows',  label: 'Show Config',    icon: Settings2 },
+    { key: 'style',  label: 'Style Profiles', icon: Brain     },
+    { key: 'voice',  label: 'Voice & Avatar', icon: Mic       },
+    { key: 'apis',   label: 'API Keys',       icon: Key       },
   ]
 
   return (
@@ -95,14 +91,11 @@ export default function Settings() {
         <p className="text-sm font-mono text-nova-muted mt-1">Configure NOVA — shows, AI style, voice, and API keys</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-nova-border pb-0">
+      <div className="flex items-center gap-1 border-b border-nova-border">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-body border-b-2 -mb-px transition-all ${
-              tab === key
-                ? 'border-nova-gold text-nova-gold'
-                : 'border-transparent text-nova-muted hover:text-white'
+              tab === key ? 'border-nova-gold text-nova-gold' : 'border-transparent text-nova-muted hover:text-white'
             }`}>
             <Icon size={13} /> {label}
           </button>
@@ -111,11 +104,10 @@ export default function Settings() {
 
       {loading ? (
         <div className="flex items-center gap-2 text-nova-muted text-sm py-8">
-          <Loader2 size={14} className="animate-spin" /> Loading settings…
+          <Loader2 size={14} className="animate-spin" /> Loading settings...
         </div>
       ) : (
         <>
-          {/* Show Config tab */}
           {tab === 'shows' && (
             <div className="space-y-4">
               {shows.map(show => {
@@ -145,7 +137,7 @@ export default function Settings() {
                         <label className="block text-xs font-mono text-nova-muted mb-1">Background URL</label>
                         <input value={getConfig(show, 'background_url')}
                           onChange={e => updateConfig(show.show_name, 'background_url', e.target.value)}
-                          className="nova-input w-full" placeholder="https://… or leave blank for solid color" />
+                          className="nova-input w-full" placeholder="https://... or leave blank for solid color" />
                       </div>
                       <div>
                         <label className="block text-xs font-mono text-nova-muted mb-1">Brand Color</label>
@@ -161,13 +153,10 @@ export default function Settings() {
                     </div>
                     {isDirty && (
                       <button onClick={() => saveShow(show.show_name)} disabled={saving === show.show_name}
-                        className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-nova-gold text-nova-navy text-sm font-body
-                                   hover:bg-nova-gold/80 transition-all disabled:opacity-50">
-                        {saving === show.show_name
-                          ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
-                          : saved === show.show_name
-                            ? <><Check size={13} /> Saved!</>
-                            : <><Save size={13} /> Save Changes</>}
+                        className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-nova-gold text-nova-navy text-sm font-body hover:bg-nova-gold/80 transition-all disabled:opacity-50">
+                        {saving === show.show_name ? <><Loader2 size={13} className="animate-spin" /> Saving...</> :
+                         saved === show.show_name  ? <><Check size={13} /> Saved!</> :
+                                                     <><Save size={13} /> Save Changes</>}
                       </button>
                     )}
                   </div>
@@ -176,7 +165,6 @@ export default function Settings() {
             </div>
           )}
 
-          {/* Style Profiles tab */}
           {tab === 'style' && (
             <div className="space-y-4">
               <div className="nova-card border border-nova-violet/30">
@@ -185,8 +173,8 @@ export default function Settings() {
                   <span className="text-xs font-mono text-nova-violet">How Style Profiles Work</span>
                 </div>
                 <p className="text-xs font-mono text-nova-muted leading-relaxed">
-                  NOVA's AI reads your style profile before generating any content. The style prompt, vocabulary, 
-                  hooks, and CTAs train NOVA to sound like <strong className="text-white">you</strong> — not generic AI. 
+                  NOVA Brain reads your style profile before generating any content. The style prompt, vocabulary,
+                  hooks, and CTAs train NOVA to sound like <strong className="text-white">you</strong>.
                   Add sample scripts from your best-performing content to improve accuracy over time.
                 </p>
               </div>
@@ -197,11 +185,13 @@ export default function Settings() {
                   <div key={profile.show_name} className="nova-card">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                      <h3 className="font-display text-white">{profile.show_name.replace(/_/g,' ').replace(/\w/g, c => c.toUpperCase())}</h3>
+                      <h3 className="font-display text-white">
+                        {profile.show_name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      </h3>
                     </div>
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs font-mono text-nova-muted mb-1">AI Style Prompt (main voice instruction)</label>
+                        <label className="block text-xs font-mono text-nova-muted mb-1">AI Style Prompt — main voice instruction for Claude</label>
                         <textarea value={getProfile(profile, 'style_prompt')}
                           onChange={e => updateProfile(profile.show_name, 'style_prompt', e.target.value)}
                           className="nova-input w-full h-28 resize-none text-xs" />
@@ -210,56 +200,47 @@ export default function Settings() {
                         <div>
                           <label className="block text-xs font-mono text-nova-muted mb-1">Tone Tags (one per line)</label>
                           <textarea value={getProfile(profile, 'tone_tags')}
-                            onChange={e => updateProfile(profile.show_name, 'tone_tags', e.target.value.split('
-'))}
+                            onChange={e => updateProfile(profile.show_name, 'tone_tags', e.target.value.split('\n'))}
                             className="nova-input w-full h-20 resize-none text-xs" />
                         </div>
                         <div>
                           <label className="block text-xs font-mono text-nova-muted mb-1">Content Pillars (one per line)</label>
                           <textarea value={getProfile(profile, 'content_pillars')}
-                            onChange={e => updateProfile(profile.show_name, 'content_pillars', e.target.value.split('
-'))}
+                            onChange={e => updateProfile(profile.show_name, 'content_pillars', e.target.value.split('\n'))}
                             className="nova-input w-full h-20 resize-none text-xs" />
                         </div>
                         <div>
                           <label className="block text-xs font-mono text-nova-muted mb-1">Power Vocabulary (one per line)</label>
                           <textarea value={getProfile(profile, 'vocabulary')}
-                            onChange={e => updateProfile(profile.show_name, 'vocabulary', e.target.value.split('
-'))}
+                            onChange={e => updateProfile(profile.show_name, 'vocabulary', e.target.value.split('\n'))}
                             className="nova-input w-full h-20 resize-none text-xs" />
                         </div>
                         <div>
                           <label className="block text-xs font-mono text-nova-muted mb-1">Words to NEVER Use (one per line)</label>
                           <textarea value={getProfile(profile, 'avoid_words')}
-                            onChange={e => updateProfile(profile.show_name, 'avoid_words', e.target.value.split('
-'))}
+                            onChange={e => updateProfile(profile.show_name, 'avoid_words', e.target.value.split('\n'))}
                             className="nova-input w-full h-20 resize-none text-xs" />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-mono text-nova-muted mb-1">Hook Patterns (one per line — your proven formats)</label>
+                        <label className="block text-xs font-mono text-nova-muted mb-1">Hook Patterns (one per line)</label>
                         <textarea value={getProfile(profile, 'hook_patterns')}
-                          onChange={e => updateProfile(profile.show_name, 'hook_patterns', e.target.value.split('
-'))}
+                          onChange={e => updateProfile(profile.show_name, 'hook_patterns', e.target.value.split('\n'))}
                           className="nova-input w-full h-24 resize-none text-xs" />
                       </div>
                       <div>
                         <label className="block text-xs font-mono text-nova-muted mb-1">CTA Patterns (one per line)</label>
                         <textarea value={getProfile(profile, 'cta_patterns')}
-                          onChange={e => updateProfile(profile.show_name, 'cta_patterns', e.target.value.split('
-'))}
+                          onChange={e => updateProfile(profile.show_name, 'cta_patterns', e.target.value.split('\n'))}
                           className="nova-input w-full h-20 resize-none text-xs" />
                       </div>
                     </div>
                     {isDirty && (
                       <button onClick={() => saveProfile(profile.show_name)} disabled={saving === `profile_${profile.show_name}`}
-                        className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-nova-violet text-white text-sm font-body
-                                   hover:bg-nova-violet/80 transition-all disabled:opacity-50">
-                        {saving === `profile_${profile.show_name}`
-                          ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
-                          : saved === `profile_${profile.show_name}`
-                            ? <><Check size={13} /> Saved!</>
-                            : <><Save size={13} /> Save Style Profile</>}
+                        className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-nova-violet text-white text-sm font-body hover:bg-nova-violet/80 transition-all disabled:opacity-50">
+                        {saving === `profile_${profile.show_name}` ? <><Loader2 size={13} className="animate-spin" /> Saving...</> :
+                         saved  === `profile_${profile.show_name}` ? <><Check size={13} /> Saved!</> :
+                                                                     <><Save size={13} /> Save Style Profile</>}
                       </button>
                     )}
                   </div>
@@ -268,7 +249,6 @@ export default function Settings() {
             </div>
           )}
 
-          {/* API Keys tab */}
           {tab === 'apis' && (
             <div className="space-y-4">
               <div className="nova-card border border-nova-gold/30">
@@ -277,8 +257,8 @@ export default function Settings() {
                   <h3 className="font-display text-nova-gold">API Key Setup</h3>
                 </div>
                 <p className="text-xs font-mono text-nova-muted mb-4 leading-relaxed">
-                  API keys are stored securely in Supabase Edge Function Secrets — never in the browser.
-                  Add them via: <strong className="text-white">Supabase Dashboard → Edge Functions → Secrets</strong>
+                  API keys are stored securely in Supabase Edge Function Secrets.
+                  Add them via: <strong className="text-white">Supabase Dashboard &rarr; Edge Functions &rarr; Secrets</strong>
                 </p>
                 <div className="space-y-3">
                   {[
@@ -291,19 +271,15 @@ export default function Settings() {
                     <div key={api.name} className="flex items-start gap-4 p-3 rounded-xl border border-nova-border/50">
                       <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
                         api.status === 'configured' ? 'bg-nova-teal' :
-                        api.status === 'required'   ? 'bg-nova-crimson animate-pulse' :
-                        'bg-nova-gold/60'
+                        api.status === 'required'   ? 'bg-nova-crimson animate-pulse' : 'bg-nova-gold/60'
                       }`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <code className="text-xs font-mono text-nova-gold">{api.name}</code>
                           <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
                             api.status === 'configured' ? 'bg-nova-teal/15 text-nova-teal' :
-                            api.status === 'required'   ? 'bg-nova-crimson/15 text-nova-crimson' :
-                            'bg-nova-gold/15 text-nova-gold'
-                          }`}>
-                            {api.status}
-                          </span>
+                            api.status === 'required'   ? 'bg-nova-crimson/15 text-nova-crimson' : 'bg-nova-gold/15 text-nova-gold'
+                          }`}>{api.status}</span>
                           <span className="text-xs font-mono text-white">{api.label}</span>
                         </div>
                         <p className="text-xs font-mono text-nova-muted mt-1 leading-relaxed">{api.desc}</p>
@@ -319,21 +295,29 @@ export default function Settings() {
             </div>
           )}
 
-          {/* Voice & Avatar tab */}
           {tab === 'voice' && (
             <div className="space-y-4">
               <div className="nova-card">
                 <h3 className="font-display text-white mb-3 flex items-center gap-2">
-                  <Mic size={15} className="text-nova-teal" /> Voice & Avatar Setup
+                  <Mic size={15} className="text-nova-teal" /> Voice and Avatar Setup
                 </h3>
                 <p className="text-xs font-mono text-nova-muted mb-4">
-                  Manage voices in the <strong className="text-white">Voice Studio</strong> page. 
+                  Manage voices in the <strong className="text-white">Voice Studio</strong> page.
                   Configure avatar IDs and voice assignments per show in the <strong className="text-white">Show Config</strong> tab.
                 </p>
                 <div className="space-y-3 text-sm font-mono text-nova-muted">
-                  <p className="flex items-center gap-2"><BookOpen size={13} /> <strong className="text-white">Voice Clone:</strong> Go to Voice Studio → Clone Your Voice → Upload 3-5 audio samples</p>
-                  <p className="flex items-center gap-2"><BookOpen size={13} /> <strong className="text-white">Avatar ID:</strong> Go to app.heygen.com → Avatars → Copy the base Avatar ID (not Look ID)</p>
-                  <p className="flex items-center gap-2"><BookOpen size={13} /> <strong className="text-white">Assign to Show:</strong> Voice Studio → Assign Voice to Show → Select show + voice ID</p>
+                  <p className="flex items-center gap-2">
+                    <BookOpen size={13} />
+                    <strong className="text-white">Voice Clone:</strong> Voice Studio &rarr; Clone Your Voice &rarr; Upload 3-5 audio samples
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <BookOpen size={13} />
+                    <strong className="text-white">Avatar ID:</strong> app.heygen.com &rarr; Avatars &rarr; Copy the base Avatar ID
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <BookOpen size={13} />
+                    <strong className="text-white">Assign to Show:</strong> Voice Studio &rarr; Assign Voice to Show
+                  </p>
                 </div>
               </div>
             </div>
