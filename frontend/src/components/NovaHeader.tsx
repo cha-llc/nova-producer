@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Radio, FileText, Video, Settings } from 'lucide-react'
+import { Radio, FileText, Video, Settings, Sun } from 'lucide-react'
 import ChaNav from './ChaNav'
 
 const nav = [
   { to: '/',         label: 'Dashboard', icon: Radio },
   { to: '/scripts',  label: 'Scripts',   icon: FileText },
   { to: '/episodes', label: 'Episodes',  icon: Video },
+  { to: '/sph',      label: 'SPH',       icon: Sun },
   { to: '/settings', label: 'Settings',  icon: Settings },
 ]
 
