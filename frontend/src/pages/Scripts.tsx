@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   Loader2, RefreshCw, ChevronDown, ChevronUp,
   Copy, Check, Save, Play, Search, Plus, X, RotateCcw,
-  AlertTriangle, Zap, CheckCircle, AlertCircle
+  AlertTriangle, Zap, CheckCircle, AlertCircle, Hash, MessageSquare, Sparkles
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -12,6 +12,7 @@ type Script = {
   caption: string; status: string; post_date: string | null; post_time_utc: string
 }
 type ShowInfo = { id: string; show_name: string; display_name: string; color: string }
+type SocialContent = { script_id: string; hook: string; caption: string; cta: string; hashtags: string[]; status: string }
 
 const STATUS_COLOR: Record<string, string> = {
   draft:      'bg-nova-border/50 text-nova-muted',
@@ -50,6 +51,8 @@ export default function Scripts() {
   const [copied, setCopied]     = useState<string | null>(null)
   const [producing, setProducing] = useState<string | null>(null)
   const [produceMsg, setProduceMsg] = useState<Record<string, string>>({})
+  const [socialMap, setSocialMap]     = useState<Record<string, SocialContent>>({})
+  const [copiedField, setCopiedField] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating]     = useState(false)
   const [form, setForm]             = useState({ ...EMPTY_FORM })
@@ -78,6 +81,12 @@ export default function Scripts() {
     setEdits(prev => { const n = { ...prev }; delete n[id]; return n })
     setSaving(null)
     load()
+  }
+
+  const copyField = (text: string, key: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedField(key)
+    setTimeout(() => setCopiedField(null), 2000)
   }
 
   // Produce with NOVA: set script status to 'ready' — triggers DB trigger -> ai-show-producer
@@ -282,6 +291,30 @@ export default function Scripts() {
                         {DAY[new Date(script.post_date + 'T00:00:00').getDay()]} {script.post_date} @ {script.post_time_utc} UTC
                       </p>
                     )}
+                    {/* Social content preview */}
+                    {socialMap[script.id]?.hook && (
+                      <div className="mt-2 space-y-1.5">
+                        <p className="text-xs text-nova-muted leading-relaxed italic border-l-2 pl-2"
+                          style={{ borderColor: color }}>
+                          &#8220;{socialMap[script.id].hook}&#8221;
+                        </p>
+                        {socialMap[script.id].hashtags?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {socialMap[script.id].hashtags.slice(0,6).map(h => (
+                              <span key={h} className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                                style={{ background: `${color}15`, color: color }}>
+                                #{h}
+                              </span>
+                            ))}
+                            {socialMap[script.id].hashtags.length > 6 && (
+                              <span className="text-[10px] font-mono text-nova-muted">
+                                +{socialMap[script.id].hashtags.length - 6}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
@@ -351,6 +384,72 @@ export default function Scripts() {
                         onChange={e => setEdits(p => ({...p, [script.id]: {...(p[script.id] ?? script), caption: e.target.value}}))}
                         className="nova-input w-full h-20 resize-none text-xs" />
                     </div>
+                    {/* Social Content Section */}
+                    {socialMap[script.id] && (
+                      <div className="space-y-3 p-3 rounded-xl border border-nova-border/50" style={{ background: `${color}08` }}>
+                        <p className="text-xs font-mono uppercase tracking-widest flex items-center gap-1.5" style={{ color }}>
+                          <Sparkles size={10} /> Social Content
+                        </p>
+                        {/* Hook */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-mono text-nova-muted uppercase tracking-widest">Hook</label>
+                            <button onClick={() => copyField(socialMap[script.id].hook, script.id+'-hook')}
+                              className="text-nova-muted hover:text-nova-gold transition-colors p-0.5">
+                              {copiedField === script.id+'-hook' ? <Check size={11} className="text-nova-teal" /> : <Copy size={11} />}
+                            </button>
+                          </div>
+                          <p className="text-xs text-white leading-relaxed italic">"{socialMap[script.id].hook}"</p>
+                        </div>
+                        {/* Caption */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-mono text-nova-muted uppercase tracking-widest">Caption</label>
+                            <button onClick={() => copyField(socialMap[script.id].caption, script.id+'-cap')}
+                              className="text-nova-muted hover:text-nova-gold transition-colors p-0.5">
+                              {copiedField === script.id+'-cap' ? <Check size={11} className="text-nova-teal" /> : <Copy size={11} />}
+                            </button>
+                          </div>
+                          <p className="text-xs text-nova-muted leading-relaxed">{socialMap[script.id].caption}</p>
+                        </div>
+                        {/* CTA */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-mono text-nova-muted uppercase tracking-widest flex items-center gap-1"><MessageSquare size={9} /> Comment CTA</label>
+                            <button onClick={() => copyField(socialMap[script.id].cta, script.id+'-cta')}
+                              className="text-nova-muted hover:text-nova-gold transition-colors p-0.5">
+                              {copiedField === script.id+'-cta' ? <Check size={11} className="text-nova-teal" /> : <Copy size={11} />}
+                            </button>
+                          </div>
+                          <p className="text-xs text-white font-medium">{socialMap[script.id].cta}</p>
+                        </div>
+                        {/* Hashtags */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-mono text-nova-muted uppercase tracking-widest flex items-center gap-1"><Hash size={9} /> Hashtags</label>
+                            <button onClick={() => copyField(socialMap[script.id].hashtags.map(h=>'#'+h).join(' '), script.id+'-ht')}
+                              className="text-nova-muted hover:text-nova-gold transition-colors p-0.5">
+                              {copiedField === script.id+'-ht' ? <Check size={11} className="text-nova-teal" /> : <Copy size={11} />}
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {socialMap[script.id].hashtags.map(h => (
+                              <span key={h} className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                                style={{ background: `${color}18`, color }}>#{h}</span>
+                            ))}
+                          </div>
+                        </div>
+                        {/* Copy All */}
+                        <button onClick={() => {
+                          const sc = socialMap[script.id]
+                          const full = [sc.hook, sc.caption, sc.cta, sc.hashtags.map(h=>'#'+h).join(' ')].filter(Boolean).join('\n\n')
+                          copyField(full, script.id+'-all')
+                        }} className="flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-lg transition-all w-full justify-center"
+                          style={{ background: `${color}18`, color }}>
+                          {copiedField === script.id+'-all' ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Full Post</>}
+                        </button>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 flex-wrap">
                       <div>
                         <label className="block text-xs font-mono text-nova-muted mb-1">Status</label>
