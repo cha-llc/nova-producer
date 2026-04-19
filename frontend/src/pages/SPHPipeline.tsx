@@ -86,14 +86,7 @@ export default function SPHPipeline() {
     })
     const d = await r.json()
     setActing(null)
-    setMsg(d.success ? `✅ Week ${weekNum} scripted — review then Approve to produce` : (() => {
-      const raw = d.error ?? 'Unknown error'
-      // Extract clean message from Anthropic JSON errors
-      try {
-        const inner = JSON.parse(raw.replace(/^Script generation failed: Claude \d+: /, ''))
-        return `❌ ${inner?.error?.message ?? raw}`
-      } catch { return `❌ ${raw.slice(0, 120)}` }
-    })())
+    setMsg(d.success ? `✅ Week ${weekNum} scripted — review in Scripts, then Approve to produce` : `❌ ${d.error ?? 'Generation failed'}`)
     if (d.success) load()
   }
 
