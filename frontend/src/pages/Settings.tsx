@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Settings2, Save, Loader2, Check, ExternalLink, Info, BookOpen, Brain, Mic, Palette } from 'lucide-react'
+import { Settings2, Save, Loader2, Check, ExternalLink, Info, BookOpen, Brain, Mic, Palette, Link2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ShowConfig, NovaStyleProfile } from '../types'
 
@@ -19,6 +19,19 @@ export default function Settings() {
   const [profiles, setProfiles] = useState<NovaStyleProfile[]>([])
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading]   = useState(true)
+  const [canvaConnecting, setCanvaConnecting] = useState(false)
+  const [canvaMsg, setCanvaMsg]               = useState('')
+
+  const connectCanva = async () => {
+    setCanvaConnecting(true); setCanvaMsg('')
+    try {
+      const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/canva-oauth?action=auth_url`)
+      const d = await r.json()
+      if (d.auth_url) window.location.href = d.auth_url
+      else setCanvaMsg('Error: ' + (d.error ?? 'Could not generate auth URL'))
+    } catch (e) { setCanvaMsg('Error: ' + String(e)) }
+    setCanvaConnecting(false)
+  }
   const [saving, setSaving]     = useState<string | null>(null)
   const [saved, setSaved]       = useState<string | null>(null)
   const [tab, setTab]           = useState<Tab>('shows')
@@ -257,10 +270,24 @@ export default function Settings() {
           {tab === 'canva' && (
             <div className="space-y-4">
               <div className="nova-card border border-[#7B2ABF]/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <Palette size={14} style={{ color: '#A855F7' }} />
-                  <h3 className="font-display" style={{ color: '#A855F7' }}>Canva Templates</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Palette size={14} style={{ color: '#A855F7' }} />
+                    <h3 className="font-display" style={{ color: '#A855F7' }}>Canva Templates</h3>
+                  </div>
+                  <button onClick={connectCanva} disabled={canvaConnecting}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-body transition-all disabled:opacity-50"
+                    style={{ backgroundColor: '#7B2ABF' }}>
+                    {canvaConnecting
+                      ? <><Loader2 size={13} className="animate-spin" /> Connecting...</>
+                      : <><Link2 size={13} /> Connect Canva</>}
+                  </button>
                 </div>
+                {canvaMsg && (
+                  <p className={`text-xs font-mono mb-3 ${canvaMsg.startsWith('Error') ? 'text-nova-crimson' : 'text-nova-teal'}`}>
+                    {canvaMsg}
+                  </p>
+                )}
                 <p className="text-xs font-mono text-nova-muted mb-4 leading-relaxed">
                   Branded Canva thumbnail templates for each show. These are pre-built with Tea Time Network
                   brand colors. Open in Canva to customize, then export and use for your episodes.
