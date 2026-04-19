@@ -369,8 +369,8 @@ export default function Scripts() {
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                    {/* Produce with NOVA button */}
-                    {canProduce && (
+                    {/* Produce button — only when draft/failed and not currently scripting */}
+                    {canProduce && !isScripting && (
                       <button onClick={() => produceWithNova(script)} disabled={isProducing}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-white transition-all disabled:opacity-50"
                         style={{ background: 'linear-gradient(135deg, #9B5DE5, #2A9D8F)' }}>
@@ -379,22 +379,55 @@ export default function Scripts() {
                           : <><Zap size={11} /> Produce</>}
                       </button>
                     )}
+                    {/* Scripting: NOVA is generating the script via Claude */}
+                    {isScripting && (
+                      <span className="flex items-center gap-1.5 text-xs font-mono text-blue-400">
+                        <Wand2 size={11} className="animate-pulse" /> Writing...
+                      </span>
+                    )}
                     {script.status === 'processing' && (
                       <span className="flex items-center gap-1 text-xs font-mono text-nova-violet">
                         <Loader2 size={11} className="animate-spin" /> Producing
                       </span>
                     )}
                     {script.status === 'done' && <CheckCircle size={14} className="text-green-400" />}
-                    {script.status === 'failed' && (
+                    {script.status === 'failed' && !isScripting && (
                       <button onClick={() => produceWithNova(script)} disabled={isProducing}
                         className="flex items-center gap-1 text-xs font-mono text-nova-crimson hover:text-nova-gold transition-colors">
                         <RotateCcw size={11} /> Retry
                       </button>
                     )}
+                    {/* Expand/collapse */}
                     <button onClick={() => setExpanded(p => ({...p, [script.id]: !p[script.id]}))}
                       className="nova-btn-ghost p-1.5">
                       {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                     </button>
+                    {/* Delete button — inline confirm, only for draft/failed/scripting */}
+                    {canDelete && !confirming && !isDeleting && (
+                      <button onClick={() => setConfirmDelete(script.id)}
+                        className="nova-btn-ghost p-1.5 hover:text-nova-crimson transition-colors"
+                        title="Delete script">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                    {confirming && (
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-xs font-mono text-nova-crimson">Delete?</span>
+                        <button onClick={() => deleteScript(script.id)}
+                          className="text-xs font-mono px-2 py-0.5 rounded bg-nova-crimson/20 text-nova-crimson hover:bg-nova-crimson/30 transition-colors">
+                          Yes
+                        </button>
+                        <button onClick={() => setConfirmDelete(null)}
+                          className="text-xs font-mono px-2 py-0.5 rounded bg-nova-border text-nova-muted hover:text-white transition-colors">
+                          No
+                        </button>
+                      </span>
+                    )}
+                    {isDeleting && (
+                      <span className="flex items-center gap-1 text-xs font-mono text-nova-crimson">
+                        <Loader2 size={11} className="animate-spin" /> Deleting...
+                      </span>
+                    )}
                   </div>
                 </div>
 
