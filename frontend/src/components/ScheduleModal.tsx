@@ -158,6 +158,10 @@ export default function ScheduleModal({ episode, onClose, onScheduled }: Props) 
     setResult(data.results ?? {})
     setScheduling(false)
     if (data.success) setTimeout(() => { onScheduled(); onClose() }, 2000)
+    if (data.queued) {
+      // Post queued — show message, don't close
+      console.info('[NOVA] Post queued:', data.message)
+    }
   }
 
   const S: React.CSSProperties = { display:'flex', flexDirection:'column', gap:'4px' }
@@ -191,10 +195,12 @@ export default function ScheduleModal({ episode, onClose, onScheduled }: Props) 
 
           {/* Result */}
           {result && (
-            <div style={{ padding:'12px', borderRadius:'var(--border-radius-md)', background:'var(--color-background-secondary)', border:'0.5px solid var(--color-border-tertiary)' }}>
-              <p style={{ fontSize:'11px', fontFamily:'var(--font-mono)', fontWeight:600, color:'var(--color-text-primary)', marginBottom:'8px' }}>SCHEDULE RESULT</p>
+            <div style={{ padding:'12px', borderRadius:'var(--border-radius-md)', background:'var(--color-background-secondary)', border:`0.5px solid ${Object.values(result).every(v=>v==='✅') ? '#2A9D8F' : Object.values(result).some(v=>v.includes('unauthorized')) ? '#C9A84C' : 'var(--color-border-tertiary)'}` }}>
+              <p style={{ fontSize:'11px', fontFamily:'var(--font-mono)', fontWeight:600, color: Object.values(result).some(v=>v.includes('unauthorized')) ? '#C9A84C' : 'var(--color-text-primary)', marginBottom:'8px' }}>
+                {Object.values(result).some(v=>v.includes('unauthorized')) ? '⚠️ QUEUED — API KEY NEEDS UPDATE' : 'SCHEDULE RESULT'}
+              </p>
               {Object.entries(result).map(([p, r]) => (
-                <p key={p} style={{ fontSize:'12px', fontFamily:'var(--font-mono)', color: r === '✅' ? '#2A9D8F' : '#C1121F', margin:'2px 0' }}>{p}: {r}</p>
+                <p key={p} style={{ fontSize:'12px', fontFamily:'var(--font-mono)', color: r === '✅' ? '#2A9D8F' : r.includes('unauthorized') ? '#C9A84C' : '#C1121F', margin:'2px 0' }}>{p}: {r}</p>
               ))}
             </div>
           )}
