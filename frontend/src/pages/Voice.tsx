@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Mic, Loader2, Check, Play, AlertCircle, RefreshCw, PlusCircle, Volume2 } from 'lucide-react'
 import type { NovaVoiceClone } from '../types'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+const SUPABASE_URL    = 'https://vzzzqsmqqaoilkmskadl.supabase.co'
 const VOICE_CLONE_URL = `${SUPABASE_URL}/functions/v1/nova-voice-clone`
 
 interface ELVoice { voice_id: string; name: string; preview_url: string; category: string; fine_tuning?: string }
@@ -43,17 +43,26 @@ export default function Voice() {
 
   useEffect(() => { load() }, [])
 
-  const testVoice = async (voiceId: string) => {
-    setTesting(voiceId)
+  // For standard voices: use preview_url directly (no API key needed)
+  // For cloned voices: call backend test action (requires ELEVENLABS_API_KEY)
+  const testVoice = async (voice: ELVoice) => {
+    setTesting(voice.voice_id)
+    setError('')
     try {
-      const r = await fetch(`${VOICE_CLONE_URL}?action=test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voice_id: voiceId }),
-      })
-      const d = await r.json()
-      if (d.success) setTestAudio(prev => ({ ...prev, [voiceId]: d.audio_url }))
-      else setError(d.error || 'Test failed')
+      if (voice.preview_url && voice.category !== 'cloned') {
+        // Standard voice: play preview URL directly
+        setTestAudio(prev => ({ ...prev, [voice.voice_id]: voice.preview_url }))
+      } else {
+        // Cloned voice: generate via backend
+        const r = await fetch(`${VOICE_CLONE_URL}?action=test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voice_id: voice.voice_id }),
+        })
+        const d = await r.json()
+        if (d.success) setTestAudio(prev => ({ ...prev, [voice.voice_id]: d.audio_url }))
+        else setError(d.error || 'Test failed')
+      }
     } catch (e) { setError(String(e)) }
     setTesting(null)
   }
@@ -219,7 +228,7 @@ export default function Voice() {
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-nova-teal/15 text-nova-teal">Cloned</span>
                 </div>
                 <div className="flex items-center gap-2 mt-3">
-                  <button onClick={() => testVoice(v.voice_id)} disabled={testing === v.voice_id}
+                  <button onClick={() => testVoice(v)} disabled={testing === v.voice_id}
                     className="flex items-center gap-1.5 text-xs font-mono text-nova-muted border border-nova-border/50 px-3 py-1.5 rounded-lg hover:text-nova-teal hover:border-nova-teal/40 transition-all disabled:opacity-40">
                     {testing === v.voice_id ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
                     Test Voice
@@ -243,10 +252,15 @@ export default function Voice() {
                     <p className="text-sm font-body text-white">{v.name}</p>
                     <p className="text-[10px] font-mono text-nova-muted">{v.voice_id}</p>
                   </div>
-                  <button onClick={() => testVoice(v.voice_id)} disabled={testing === v.voice_id}
-                    className="text-nova-muted hover:text-nova-gold transition-colors p-1 flex-shrink-0">
-                    {testing === v.voice_id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {testAudio[v.voice_id] && (
+                      <audio controls src={testAudio[v.voice_id]} className="h-7 w-32" />
+                    )}
+                    <button onClick={() => testVoice(v)} disabled={testing === v.voice_id}
+                      className="text-nova-muted hover:text-nova-gold transition-colors p-1">
+                      {testing === v.voice_id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
