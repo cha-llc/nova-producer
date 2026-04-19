@@ -26,6 +26,17 @@ interface Script {
   caption?: string
 }
 
+interface TextLayer {
+  id: string
+  text: string
+  x: number   // center x as % of canvas width (0-100)
+  y: number   // center y as % of canvas height (0-100)
+  fontSize: number  // in canvas-space px (canvas=1080)
+  color: string
+  bold: boolean
+  shadow: boolean
+}
+
 type Stage = 'setup' | 'recording' | 'review' | 'uploading' | 'done'
 
 const SHOW_LABELS: Record<string, string> = {
@@ -53,7 +64,8 @@ export default function Record() {
   const [thumbnailUrl, setThumbnailUrl]   = useState('')
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [thumbLoading, setThumbLoading]   = useState(false)
-  const [overlayText, setOverlayText]       = useState('')
+  const [textLayers, setTextLayers]         = useState<TextLayer[]>([])
+  const [selectedLayer, setSelectedLayer]   = useState<string | null>(null)
 
   const [shows, setShows]           = useState<ShowConfig[]>([])
   const [scripts, setScripts]       = useState<Script[]>([])
@@ -79,7 +91,9 @@ export default function Record() {
 
   const previewRef    = useRef<HTMLVideoElement>(null)
   const reviewRef     = useRef<HTMLVideoElement>(null)
-  const thumbImgRef   = useRef<HTMLImageElement>(null)
+  const thumbImgRef        = useRef<HTMLImageElement>(null)
+  const thumbContainerRef  = useRef<HTMLDivElement>(null)
+  const dragState          = useRef<{ layerId: string; startMouseX: number; startMouseY: number; startLayerX: number; startLayerY: number } | null>(null)
   const streamRef     = useRef<MediaStream | null>(null)
   const recorderRef   = useRef<MediaRecorder | null>(null)
   const chunksRef     = useRef<Blob[]>([])
@@ -126,13 +140,38 @@ export default function Record() {
   }, [showId])
 
 
-  // Auto-fill overlayText when show changes
-  useEffect(() => {
+  // Text layer helpers
+  function addTextLayer() {
+    const id = Math.random().toString(36).slice(2, 10)
     const show = shows.find(s => s.id === showId)
-    if (show) {
-      setOverlayText(SHOW_LABELS[show.show_name] || show.show_name.replace(/_/g,' ').toUpperCase())
-    }
-  }, [showId, shows])
+    const defaultText = show ? (SHOW_LABELS[show.show_name] || show.show_name.replace(/_/g,' ').toUpperCase()) : 'Text'
+    setTextLayers(prev => [...prev, { id, text: defaultText, x: 50, y: 85, fontSize: 80, color: '#ffffff', bold: true, shadow: true }])
+    setSelectedLayer(id)
+  }
+  function updateLayer(id: string, patch: Partial<TextLayer>) {
+    setTextLayers(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
+  }
+  function deleteLayer(id: string) {
+    setTextLayers(prev => prev.filter(l => l.id !== id))
+    if (selectedLayer === id) setSelectedLayer(null)
+  }
+  function handleLayerMouseDown(e: React.MouseEvent, layerId: string) {
+    e.stopPropagation(); e.preventDefault()
+    setSelectedLayer(layerId)
+    const layer = textLayers.find(l => l.id === layerId)
+    if (!layer) return
+    dragState.current = { layerId, startMouseX: e.clientX, startMouseY: e.clientY, startLayerX: layer.x, startLayerY: layer.y }
+  }
+  function handleContainerMouseMove(e: React.MouseEvent) {
+    if (!dragState.current || !thumbContainerRef.current) return
+    const rect = thumbContainerRef.current.getBoundingClientRect()
+    const dx = (e.clientX - dragState.current.startMouseX) / rect.width * 100
+    const dy = (e.clientY - dragState.current.startMouseY) / rect.height * 100
+    const newX = Math.max(2, Math.min(98, dragState.current.startLayerX + dx))
+    const newY = Math.max(2, Math.min(98, dragState.current.startLayerY + dy))
+    setTextLayers(prev => prev.map(l => l.id === dragState.current!.layerId ? { ...l, x: newX, y: newY } : l))
+  }
+  function handleContainerMouseUp() { dragState.current = null }
 
   // Auto-load thumbnail when thumbnail mode is toggled on
   useEffect(() => {
@@ -240,23 +279,25 @@ export default function Record() {
       const drawThumbnail = () => {
         if (img && img.complete) {
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-          // Text overlay
-          if (overlayText) {
-            const grad = ctx.createLinearGradient(0, 800, 0, 1080)
-            grad.addColorStop(0, 'rgba(0,0,0,0)')
-            grad.addColorStop(1, 'rgba(0,0,0,0.85)')
-            ctx.fillStyle = grad
-            ctx.fillRect(0, 800, 1080, 280)
-            const show = shows.find(s => s.id === showId)
-            const accentColor = show?.color || '#C9A84C'
-            ctx.fillStyle = accentColor
-            ctx.fillRect(0, 1070, 1080, 10)
+          // Draw text layers
+          for (const layer of textLayers) {
+            const lx = (layer.x / 100) * canvas.width
+            const ly = (layer.y / 100) * canvas.height
+            ctx.font = `${layer.bold ? 'bold ' : ''}${layer.fontSize}px Poppins, Arial, sans-serif`
             ctx.textAlign = 'center'
-            ctx.font = 'bold 72px Poppins, Arial, sans-serif'
-            ctx.fillStyle = 'rgba(0,0,0,0.55)'
-            ctx.fillText(overlayText, 543, 1024)
-            ctx.fillStyle = 'white'
-            ctx.fillText(overlayText, 540, 1020)
+            ctx.textBaseline = 'middle'
+            if (layer.shadow) {
+              ctx.shadowColor = 'rgba(0,0,0,0.85)'
+              ctx.shadowBlur = 10
+              ctx.shadowOffsetX = 2
+              ctx.shadowOffsetY = 2
+            }
+            ctx.fillStyle = layer.color
+            ctx.fillText(layer.text, lx, ly)
+            ctx.shadowColor = 'transparent'
+            ctx.shadowBlur = 0
+            ctx.shadowOffsetX = 0
+            ctx.shadowOffsetY = 0
           }
         } else {
           ctx.fillStyle = '#1A1A2E'
@@ -501,9 +542,18 @@ export default function Record() {
             </div>
 
             {thumbnailMode ? (
-              /* Thumbnail mode preview */
+              /* Thumbnail mode preview — drag-to-position multi-layer text editor */
               <>
-              <div className="relative rounded-2xl overflow-hidden bg-nova-navydark aspect-video border border-nova-gold/20 flex flex-col items-center justify-center gap-4">
+              {/* Square canvas preview (matches 1080×1080 recording canvas) */}
+              <div
+                ref={thumbContainerRef}
+                className="relative rounded-2xl overflow-hidden bg-nova-navydark border border-nova-gold/20 w-full select-none"
+                style={{ aspectRatio: '1/1', cursor: dragState.current ? 'grabbing' : 'default' }}
+                onMouseMove={handleContainerMouseMove}
+                onMouseUp={handleContainerMouseUp}
+                onMouseLeave={handleContainerMouseUp}
+                onClick={() => setSelectedLayer(null)}
+              >
                 {thumbnailUrl ? (
                   <>
                     <img
@@ -511,36 +561,63 @@ export default function Record() {
                       src={thumbnailUrl}
                       alt="thumbnail"
                       className="absolute inset-0 w-full h-full object-cover opacity-80"
+                      crossOrigin="anonymous"
                     />
-                    {/* Live text overlay */}
-                    {overlayText && (
-                      <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.85))' }}>
-                        <div className="px-4 pb-4 pt-8 text-center">
-                          <p className="text-white font-bold tracking-wider" style={{ fontSize: '22px', textShadow: '2px 2px 4px rgba(0,0,0,0.8)', fontFamily: 'Poppins, Arial, sans-serif' }}>
-                            {overlayText}
-                          </p>
-                          <div className="h-1 mt-2 rounded-full" style={{ background: shows.find(s => s.id === showId)?.color || '#C9A84C' }} />
+                    {/* Draggable text layers */}
+                    {textLayers.map(layer => {
+                      const containerH = thumbContainerRef.current?.clientHeight || 400
+                      const displayFontSize = Math.max(8, Math.round(layer.fontSize * (containerH / 1080)))
+                      return (
+                        <div
+                          key={layer.id}
+                          onMouseDown={e => handleLayerMouseDown(e, layer.id)}
+                          style={{
+                            position: 'absolute',
+                            left: `${layer.x}%`,
+                            top: `${layer.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                            cursor: 'grab',
+                            fontWeight: layer.bold ? 'bold' : 'normal',
+                            fontSize: `${displayFontSize}px`,
+                            color: layer.color,
+                            textShadow: layer.shadow ? '2px 2px 6px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.6)' : 'none',
+                            fontFamily: 'Poppins, Arial, sans-serif',
+                            whiteSpace: 'nowrap',
+                            outline: selectedLayer === layer.id ? `2px dashed rgba(201,168,76,0.9)` : '2px dashed transparent',
+                            outlineOffset: '4px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            zIndex: 20,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {layer.text || ' '}
                         </div>
-                      </div>
-                    )}
-                    <div className="relative z-10 flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 rounded-full bg-nova-gold/20 border-2 border-nova-gold flex items-center justify-center">
-                        <Mic size={20} className="text-nova-gold" />
-                      </div>
+                      )
+                    })}
+                    {/* Mic indicator */}
+                    <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/50">
+                      <Mic size={12} className="text-nova-gold" />
+                      <span className="text-[10px] font-mono text-nova-gold">Audio</span>
                     </div>
                     <button
                       onClick={() => { setThumbnailUrl(''); setThumbnailFile(null) }}
-                      className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-black/50 hover:bg-black/70 transition-all">
+                      className="absolute top-3 right-3 z-30 p-1.5 rounded-full bg-black/50 hover:bg-black/70 transition-all">
                       <X size={14} className="text-white" />
                     </button>
+                    {textLayers.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                        <p className="text-nova-muted/60 font-mono text-xs bg-black/30 px-3 py-1 rounded">Add text layers below</p>
+                      </div>
+                    )}
                   </>
                 ) : thumbLoading ? (
-                  <div className="flex flex-col items-center gap-3">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                     <Loader2 size={32} className="text-nova-gold animate-spin" />
                     <p className="text-nova-gold font-mono text-sm">Loading show thumbnail...</p>
                   </div>
                 ) : (
-                  <>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-nova-gold/10 border border-nova-gold/30 flex items-center justify-center">
                       <ImageIcon size={28} className="text-nova-gold/60" />
                     </div>
@@ -551,30 +628,109 @@ export default function Record() {
                       <Upload size={14} /> Choose Image
                     </button>
                     <input ref={thumbInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailFile} />
-                    <p className="text-xs font-mono text-nova-muted">Shown instead of your camera during recording</p>
-                  </>
+                  </div>
                 )}
               </div>
-              {/* Text overlay editor */}
-              <div className="mt-3">
-                <label className="text-xs font-mono text-nova-muted uppercase tracking-widest block mb-1">
-                  Thumbnail Text Overlay
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={overlayText}
-                    onChange={e => setOverlayText(e.target.value)}
-                    placeholder="Show name or episode title..."
-                    className="nova-input text-sm flex-1"
-                    maxLength={40}
-                  />
+
+              {/* Text layer controls */}
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-mono text-nova-muted uppercase tracking-widest">Text Layers</p>
                   <button
-                    onClick={() => setOverlayText('')}
-                    className="nova-btn-ghost text-xs px-3 py-1"
-                    title="Clear overlay text">✕</button>
+                    onClick={addTextLayer}
+                    className="flex items-center gap-1.5 text-xs font-mono text-nova-gold border border-nova-gold/30 px-3 py-1 rounded-lg hover:bg-nova-gold/10 transition-all">
+                    + Add Text
+                  </button>
                 </div>
-                <p className="text-[10px] font-mono text-nova-muted mt-1">Text is baked into the thumbnail during recording</p>
+
+                {textLayers.length === 0 && (
+                  <p className="text-[10px] font-mono text-nova-muted py-1">No text layers. Click "+ Add Text" to add one.</p>
+                )}
+
+                {textLayers.map((layer, i) => (
+                  <div
+                    key={layer.id}
+                    className={`p-2.5 rounded-xl border transition-all ${selectedLayer === layer.id ? 'border-nova-gold/50 bg-nova-gold/5' : 'border-nova-border/40 hover:border-nova-border/70'}`}
+                    onClick={() => setSelectedLayer(layer.id)}
+                  >
+                    {/* Row 1: label + text input + delete */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-mono text-nova-muted w-4 flex-shrink-0">#{i+1}</span>
+                      <input
+                        type="text"
+                        value={layer.text}
+                        onChange={e => updateLayer(layer.id, { text: e.target.value })}
+                        className="nova-input text-sm flex-1 py-1"
+                        placeholder="Text..."
+                        onClick={e => e.stopPropagation()}
+                      />
+                      <button
+                        onClick={e => { e.stopPropagation(); deleteLayer(layer.id) }}
+                        className="p-1 rounded text-nova-muted hover:text-nova-crimson transition-colors flex-shrink-0">
+                        <X size={13} />
+                      </button>
+                    </div>
+                    {/* Row 2: size + color + bold + shadow + position */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-mono text-nova-muted">Size</span>
+                        <input
+                          type="number"
+                          value={layer.fontSize}
+                          onChange={e => updateLayer(layer.id, { fontSize: Math.max(16, Math.min(400, Number(e.target.value))) })}
+                          className="nova-input text-xs w-16 py-0.5 px-1.5"
+                          min={16} max={400}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-mono text-nova-muted">Color</span>
+                        <input
+                          type="color"
+                          value={layer.color}
+                          onChange={e => updateLayer(layer.id, { color: e.target.value })}
+                          className="w-7 h-6 rounded cursor-pointer p-0 border-0"
+                          style={{ background: 'none' }}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </div>
+                      <button
+                        onClick={e => { e.stopPropagation(); updateLayer(layer.id, { bold: !layer.bold }) }}
+                        className={`text-xs font-bold px-2 py-0.5 rounded transition-all ${layer.bold ? 'bg-nova-gold/20 text-nova-gold' : 'text-nova-muted border border-nova-border/40 hover:text-white'}`}>
+                        B
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); updateLayer(layer.id, { shadow: !layer.shadow }) }}
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded transition-all ${layer.shadow ? 'bg-nova-teal/20 text-nova-teal' : 'text-nova-muted border border-nova-border/40 hover:text-white'}`}>
+                        Shadow
+                      </button>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <span className="text-[10px] font-mono text-nova-muted">X</span>
+                        <input
+                          type="number"
+                          value={Math.round(layer.x)}
+                          onChange={e => updateLayer(layer.id, { x: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                          className="nova-input text-xs w-12 py-0.5 px-1.5"
+                          min={0} max={100}
+                          onClick={e => e.stopPropagation()}
+                        />
+                        <span className="text-[10px] font-mono text-nova-muted">Y</span>
+                        <input
+                          type="number"
+                          value={Math.round(layer.y)}
+                          onChange={e => updateLayer(layer.id, { y: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                          className="nova-input text-xs w-12 py-0.5 px-1.5"
+                          min={0} max={100}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {textLayers.length > 0 && (
+                  <p className="text-[10px] font-mono text-nova-muted">Drag text on image to reposition · All layers baked into recording</p>
+                )}
               </div>
               </>
             ) : (
