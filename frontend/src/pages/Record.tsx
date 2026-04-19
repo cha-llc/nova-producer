@@ -53,6 +53,7 @@ export default function Record() {
   const [thumbnailUrl, setThumbnailUrl]   = useState('')
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [thumbLoading, setThumbLoading]   = useState(false)
+  const [overlayText, setOverlayText]       = useState('')
 
   const [shows, setShows]           = useState<ShowConfig[]>([])
   const [scripts, setScripts]       = useState<Script[]>([])
@@ -124,6 +125,14 @@ export default function Record() {
       })
   }, [showId])
 
+
+  // Auto-fill overlayText when show changes
+  useEffect(() => {
+    const show = shows.find(s => s.id === showId)
+    if (show) {
+      setOverlayText(SHOW_LABELS[show.show_name] || show.show_name.replace(/_/g,' ').toUpperCase())
+    }
+  }, [showId, shows])
 
   // Auto-load thumbnail when thumbnail mode is toggled on
   useEffect(() => {
@@ -231,6 +240,24 @@ export default function Record() {
       const drawThumbnail = () => {
         if (img && img.complete) {
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+          // Text overlay
+          if (overlayText) {
+            const grad = ctx.createLinearGradient(0, 800, 0, 1080)
+            grad.addColorStop(0, 'rgba(0,0,0,0)')
+            grad.addColorStop(1, 'rgba(0,0,0,0.85)')
+            ctx.fillStyle = grad
+            ctx.fillRect(0, 800, 1080, 280)
+            const show = shows.find(s => s.id === showId)
+            const accentColor = show?.color || '#C9A84C'
+            ctx.fillStyle = accentColor
+            ctx.fillRect(0, 1070, 1080, 10)
+            ctx.textAlign = 'center'
+            ctx.font = 'bold 72px Poppins, Arial, sans-serif'
+            ctx.fillStyle = 'rgba(0,0,0,0.55)'
+            ctx.fillText(overlayText, 543, 1024)
+            ctx.fillStyle = 'white'
+            ctx.fillText(overlayText, 540, 1020)
+          }
         } else {
           ctx.fillStyle = '#1A1A2E'
           ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -484,11 +511,21 @@ export default function Record() {
                       alt="thumbnail"
                       className="absolute inset-0 w-full h-full object-cover opacity-80"
                     />
+                    {/* Live text overlay */}
+                    {overlayText && (
+                      <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.85))' }}>
+                        <div className="px-4 pb-4 pt-8 text-center">
+                          <p className="text-white font-bold tracking-wider" style={{ fontSize: '22px', textShadow: '2px 2px 4px rgba(0,0,0,0.8)', fontFamily: 'Poppins, Arial, sans-serif' }}>
+                            {overlayText}
+                          </p>
+                          <div className="h-1 mt-2 rounded-full" style={{ background: shows.find(s => s.id === showId)?.color || '#C9A84C' }} />
+                        </div>
+                      </div>
+                    )}
                     <div className="relative z-10 flex flex-col items-center gap-2">
                       <div className="w-12 h-12 rounded-full bg-nova-gold/20 border-2 border-nova-gold flex items-center justify-center">
                         <Mic size={20} className="text-nova-gold" />
                       </div>
-                      <p className="text-white font-mono text-sm bg-black/60 px-3 py-1 rounded">Audio recording with thumbnail</p>
                     </div>
                     <button
                       onClick={() => { setThumbnailUrl(''); setThumbnailFile(null) }}
@@ -517,6 +554,29 @@ export default function Record() {
                   </>
                 )}
               </div>
+              {/* Text overlay editor */}
+              {thumbnailMode && (
+                <div className="mt-3">
+                  <label className="text-xs font-mono text-nova-muted uppercase tracking-widest block mb-1">
+                    Thumbnail Text Overlay
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={overlayText}
+                      onChange={e => setOverlayText(e.target.value)}
+                      placeholder="Show name or episode title..."
+                      className="nova-input text-sm flex-1"
+                      maxLength={40}
+                    />
+                    <button
+                      onClick={() => setOverlayText('')}
+                      className="nova-btn-ghost text-xs px-3 py-1"
+                      title="Clear overlay text">✕</button>
+                  </div>
+                  <p className="text-[10px] font-mono text-nova-muted mt-1">Text is baked into the thumbnail during recording</p>
+                </div>
+              )}
             ) : (
               /* Camera preview */
               <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-nova-border/40">
