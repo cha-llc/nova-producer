@@ -85,6 +85,7 @@ export default function Record() {
   const [trimEnd, setTrimEnd]       = useState(0)
   const [previewTime, setPreviewTime] = useState(0)
 
+  const [reviewBlobUrl, setReviewBlobUrl]   = useState('')
   const [uploadProgress, setUploadProgress] = useState(0)
   const [episodeId, setEpisodeId]   = useState('')
   const [error, setError]           = useState('')
@@ -92,6 +93,7 @@ export default function Record() {
   const previewRef    = useRef<HTMLVideoElement>(null)
   const reviewRef     = useRef<HTMLVideoElement>(null)
   const thumbImgRef        = useRef<HTMLImageElement>(null)
+  const thumbPreloadRef    = useRef<HTMLImageElement | null>(null)  // persists across stage changes
   const thumbContainerRef  = useRef<HTMLDivElement>(null)
   const dragState          = useRef<{ layerId: string; startMouseX: number; startMouseY: number; startLayerX: number; startLayerY: number } | null>(null)
   const streamRef     = useRef<MediaStream | null>(null)
@@ -172,6 +174,16 @@ export default function Record() {
     setTextLayers(prev => prev.map(l => l.id === dragState.current!.layerId ? { ...l, x: newX, y: newY } : l))
   }
   function handleContainerMouseUp() { dragState.current = null }
+
+  // Pre-load thumbnail image into a persistent ref so it survives stage changes
+  useEffect(() => {
+    if (!thumbnailUrl) { thumbPreloadRef.current = null; return }
+    const img = new window.Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => { thumbPreloadRef.current = img }
+    img.onerror = () => { thumbPreloadRef.current = null }
+    img.src = thumbnailUrl
+  }, [thumbnailUrl])
 
   // Auto-load thumbnail when thumbnail mode is toggled on
   useEffect(() => {
@@ -275,7 +287,8 @@ export default function Record() {
       canvas.height = 1080
       const ctx = canvas.getContext('2d')!
 
-      const img = thumbImgRef.current
+      // Use pre-loaded image ref (survives stage DOM changes)
+      const img = thumbPreloadRef.current
       const drawThumbnail = () => {
         if (img && img.complete) {
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
@@ -331,15 +344,7 @@ export default function Record() {
       const blob = new Blob(chunksRef.current, { type: mimeType })
       blobRef.current = blob
       const url = URL.createObjectURL(blob)
-      if (reviewRef.current) {
-        reviewRef.current.src = url
-        reviewRef.current.onloadedmetadata = () => {
-          const dur = reviewRef.current?.duration ?? 0
-          setDuration(dur)
-          setTrimStart(0)
-          setTrimEnd(dur)
-        }
-      }
+      setReviewBlobUrl(url)  // store in state; useEffect will set src once video renders
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
       setStage('review')
     }
@@ -393,6 +398,20 @@ export default function Record() {
     setPreviewTime(t)
   }
 
+  // Set review video src once stage switches to 'review' and video element exists
+  useEffect(() => {
+    if (stage !== 'review' || !reviewBlobUrl) return
+    const v = reviewRef.current
+    if (!v) return
+    v.src = reviewBlobUrl
+    v.onloadedmetadata = () => {
+      const dur = v.duration ?? 0
+      setDuration(dur)
+      setTrimStart(0)
+      setTrimEnd(dur)
+    }
+  }, [stage, reviewBlobUrl])
+
   useEffect(() => {
     const v = reviewRef.current
     if (!v) return
@@ -434,13 +453,19 @@ export default function Record() {
 
       // Upload thumbnail image if in thumbnail mode
       let thumbStorageUrl = ''
-      if (thumbnailMode && thumbnailFile) {
-        const thumbExt = thumbnailFile.name.split('.').pop() || 'jpg'
-        const thumbPath = `self-recorded/${showName}/thumb-${Date.now()}.${thumbExt}`
-        const thumbBuf = await thumbnailFile.arrayBuffer()
-        await supabase.storage.from('newsletter-assets')
-          .upload(thumbPath, thumbBuf, { contentType: thumbnailFile.type, upsert: false })
-        thumbStorageUrl = supabase.storage.from('newsletter-assets').getPublicUrl(thumbPath).data.publicUrl
+      if (thumbnailMode) {
+        if (thumbnailFile) {
+          // User uploaded a custom file — upload it
+          const thumbExt = thumbnailFile.name.split('.').pop() || 'jpg'
+          const thumbPath = `self-recorded/${showName}/thumb-${Date.now()}.${thumbExt}`
+          const thumbBuf = await thumbnailFile.arrayBuffer()
+          await supabase.storage.from('newsletter-assets')
+            .upload(thumbPath, thumbBuf, { contentType: thumbnailFile.type, upsert: false })
+          thumbStorageUrl = supabase.storage.from('newsletter-assets').getPublicUrl(thumbPath).data.publicUrl
+        } else if (thumbnailUrl) {
+          // Auto-loaded show thumbnail — already in Supabase Storage, use URL directly
+          thumbStorageUrl = thumbnailUrl
+        }
       }
 
       setUploadProgress(85)
