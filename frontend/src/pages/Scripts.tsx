@@ -66,8 +66,22 @@ export default function Scripts() {
         .order('post_date', { ascending: true }).order('series_part', { ascending: true }),
       supabase.from('show_configs').select('id,show_name,display_name,color').order('display_name'),
     ])
-    setScripts(sc ?? [])
+    const scripts = sc ?? []
+    setScripts(scripts as Script[])
     setShows(sh ?? [])
+    // Load social content for all scripts
+    if (scripts.length > 0) {
+      const ids = scripts.map((s: Script) => s.id)
+      const { data: socialRows } = await supabase
+        .from('nova_social_content')
+        .select('script_id,hook,caption,cta,hashtags,status')
+        .in('script_id', ids)
+      if (socialRows) {
+        const map: Record<string, SocialContent> = {}
+        ;(socialRows as SocialContent[]).forEach(r => { if (r.script_id) map[r.script_id] = r })
+        setSocialMap(map)
+      }
+    }
     setLoading(false)
   }, [])
 
