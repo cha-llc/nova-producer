@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Radio, FileText, Video, Settings, Sun, Brain, Mic } from 'lucide-react'
+import { Radio, FileText, Video, Settings, Sun, Brain, Mic, Camera } from 'lucide-react'
 import ChaNav from './ChaNav'
 
 const nav = [
@@ -7,6 +7,7 @@ const nav = [
   { to: '/scripts',  label: 'Scripts',   icon: FileText },
   { to: '/episodes', label: 'Episodes',  icon: Video    },
   { to: '/studio',   label: 'Studio',    icon: Brain    },
+  { to: '/record',   label: 'Record',    icon: Camera   },
   { to: '/voice',    label: 'Voice',     icon: Mic      },
   { to: '/sph',      label: 'SPH',       icon: Sun      },
   { to: '/settings', label: 'Settings',  icon: Settings },
