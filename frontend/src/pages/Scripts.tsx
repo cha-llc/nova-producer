@@ -11,7 +11,7 @@ type Script = {
   series_week_start: string | null; part_title: string; script_text: string
   caption: string; status: string; post_date: string | null; post_time_utc: string
 }
-type ShowInfo = { id: string; show_name: string; display_name: string; color: string }
+type ShowInfo = { id: string; show_name: string; display_name: string; color: string; avatar_id?: string; heygen_voice_id?: string; voice_id?: string; background_url?: string }
 type SocialContent = { script_id: string; hook: string; caption: string; cta: string; hashtags: string[]; status: string }
 
 const STATUS_COLOR: Record<string, string> = {
