@@ -161,19 +161,23 @@ export default function Record() {
     e.stopPropagation(); e.preventDefault()
     setSelectedLayer(layerId)
     const layer = textLayers.find(l => l.id === layerId)
-    if (!layer) return
+    if (!layer) { dragState.current = null; return }
     dragState.current = { layerId, startMouseX: e.clientX, startMouseY: e.clientY, startLayerX: layer.x, startLayerY: layer.y }
   }
   function handleContainerMouseMove(e: React.MouseEvent) {
     if (!dragState.current || !thumbContainerRef.current) return
+    // Capture all values synchronously — dragState.current may be null by the time
+    // the setTextLayers batch callback executes (if onMouseLeave fires during drag)
+    const { layerId, startMouseX, startMouseY, startLayerX, startLayerY } = dragState.current
     const rect = thumbContainerRef.current.getBoundingClientRect()
-    const dx = (e.clientX - dragState.current.startMouseX) / rect.width * 100
-    const dy = (e.clientY - dragState.current.startMouseY) / rect.height * 100
-    const newX = Math.max(2, Math.min(98, dragState.current.startLayerX + dx))
-    const newY = Math.max(2, Math.min(98, dragState.current.startLayerY + dy))
-    setTextLayers(prev => prev.map(l => l.id === dragState.current!.layerId ? { ...l, x: newX, y: newY } : l))
+    const dx = (e.clientX - startMouseX) / rect.width * 100
+    const dy = (e.clientY - startMouseY) / rect.height * 100
+    const newX = Math.max(2, Math.min(98, startLayerX + dx))
+    const newY = Math.max(2, Math.min(98, startLayerY + dy))
+    setTextLayers(prev => prev.map(l => l.id === layerId ? { ...l, x: newX, y: newY } : l))
   }
   function handleContainerMouseUp() { dragState.current = null }
+  function handleLayerMouseUp(e: React.MouseEvent) { e.stopPropagation(); dragState.current = null }
 
   // Pre-load thumbnail image into a persistent ref so it survives stage changes
   useEffect(() => {
@@ -596,6 +600,7 @@ export default function Record() {
                         <div
                           key={layer.id}
                           onMouseDown={e => handleLayerMouseDown(e, layer.id)}
+                          onMouseUp={handleLayerMouseUp}
                           style={{
                             position: 'absolute',
                             left: `${layer.x}%`,
