@@ -297,7 +297,8 @@ export default function Scripts() {
             const isExpanded = expanded[script.id]
             const edit = edits[script.id] ?? script
             const isDirty = Boolean(edits[script.id])
-            const canProduce = ['draft','failed'].includes(script.status) && Boolean(sh)
+            const hasScript  = script.script_text && script.script_text.trim().length >= 20
+            const canProduce = ['draft','failed'].includes(script.status) && Boolean(sh) && Boolean(hasScript)
             const isProducing = producing === script.id
             const canDelete   = ['draft','failed','scripting'].includes(script.status)
             const isScripting = script.status === 'scripting'
@@ -369,7 +370,12 @@ export default function Scripts() {
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                    {/* Produce button — only when draft/failed and not currently scripting */}
+                    {/* Produce button — only when draft/failed, not scripting, and has script */}
+                    {!hasScript && ['draft','failed'].includes(script.status) && !isScripting && (
+                      <span className="text-[10px] font-mono text-nova-muted italic">
+                        ← write script first
+                      </span>
+                    )}
                     {canProduce && !isScripting && (
                       <button onClick={() => produceWithNova(script)} disabled={isProducing}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-white transition-all disabled:opacity-50"
