@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Settings2, Save, Loader2, Check, Key, ExternalLink, Info, BookOpen, Brain, Mic, Palette } from 'lucide-react'
+import { Settings2, Save, Loader2, Check, ExternalLink, Info, BookOpen, Brain, Mic, Palette } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ShowConfig, NovaStyleProfile } from '../types'
 
@@ -318,51 +318,6 @@ export default function Settings() {
             </div>
           )}
 
-          {tab === 'apis' && (
-            <div className="space-y-4">
-              <div className="nova-card border border-nova-gold/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <Key size={14} className="text-nova-gold" />
-                  <h3 className="font-display text-nova-gold">API Key Setup</h3>
-                </div>
-                <p className="text-xs font-mono text-nova-muted mb-4 leading-relaxed">
-                  All keys stored securely in Supabase Vault. Add/update at:
-                  <strong className="text-white"> Supabase Dashboard &rarr; Edge Functions &rarr; Secrets</strong>
-                </p>
-                <div className="space-y-3">
-                  {[
-                    { name: 'ANTHROPIC_API_KEY', label: 'Anthropic (Claude AI)',    status: 'configured', desc: 'Powers NOVA Brain — AI copy in CJ voice, SEO keywords, all 7 platform captions.', link: 'https://console.anthropic.com/keys' },
-                    { name: 'FAL_API_KEY',        label: 'fal.ai (Image Gen)',       status: 'configured', desc: 'Generates cinematic AI thumbnails. Combines with Canva for composite designs.', link: 'https://fal.ai/dashboard/keys' },
-                    { name: 'HEYGEN_API_KEY',     label: 'HeyGen (Video)',           status: 'configured', desc: 'Avatar video rendering. Stored in vault.', link: 'https://app.heygen.com/settings' },
-                    { name: 'ELEVENLABS_API_KEY', label: 'ElevenLabs (Voice)',       status: 'configured', desc: 'TTS and voice cloning.', link: 'https://elevenlabs.io' },
-                    { name: 'SOCIALBLU_API_KEY',  label: 'Socialblu (Social)',       status: 'configured', desc: 'Posts to all 7 platforms. 79 AI tools for content generation.', link: 'https://app.socialblu.io' },
-                    { name: 'CANVA_REFRESH_TOKEN',label: 'Canva OAuth Token',        status: 'optional',   desc: 'Enables fully automated fal.ai+Canva composite pipeline. Get from Canva developer portal.', link: 'https://www.canva.com/developers' },
-                  ].map(api => (
-                    <div key={api.name} className="flex items-start gap-4 p-3 rounded-xl border border-nova-border/50">
-                      <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
-                        api.status === 'configured' ? 'bg-nova-teal' :
-                        api.status === 'optional'   ? 'bg-nova-gold/60' : 'bg-nova-crimson animate-pulse'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <code className="text-xs font-mono text-nova-gold">{api.name}</code>
-                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                            api.status === 'configured' ? 'bg-nova-teal/15 text-nova-teal' : 'bg-nova-gold/15 text-nova-gold'
-                          }`}>{api.status}</span>
-                          <span className="text-xs font-mono text-white">{api.label}</span>
-                        </div>
-                        <p className="text-xs font-mono text-nova-muted mt-1 leading-relaxed">{api.desc}</p>
-                      </div>
-                      <a href={api.link} target="_blank" rel="noreferrer"
-                        className="text-nova-muted hover:text-nova-gold transition-colors flex-shrink-0">
-                        <ExternalLink size={13} />
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>
