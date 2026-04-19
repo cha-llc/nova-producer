@@ -10,7 +10,7 @@ const SHOW_COLORS: Record<string, string> = {
   confession_court:  '#C1121F',
 }
 
-type Tab = 'shows' | 'style' | 'canva' | 'apis'
+type Tab = 'shows' | 'style' | 'canva'
 
 interface Integration { key: string; value: string; description: string }
 
@@ -76,7 +76,6 @@ export default function Settings() {
     { key: 'shows' as Tab,  label: 'Show Config',    icon: Settings2 },
     { key: 'style' as Tab,  label: 'Style Profiles', icon: Brain     },
     { key: 'canva' as Tab,  label: 'Canva Templates',icon: Palette   },
-    { key: 'apis'  as Tab,  label: 'API Keys',       icon: Key       },
   ]
 
   // Canva templates from nova_integrations
@@ -319,7 +318,6 @@ export default function Settings() {
             </div>
           )}
 
-          {/* API Keys */}
           {tab === 'apis' && (
             <div className="space-y-4">
               <div className="nova-card border border-nova-gold/30">
