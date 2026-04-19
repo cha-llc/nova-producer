@@ -71,38 +71,67 @@ export default function ScheduleModal({ episode, onClose, onScheduled }: Props) 
   useEffect(() => {
     async function load() {
       setLoading(true)
-      // 1. Load social content (hook, caption, cta, hashtags)
-      const { data: sc } = await supabase
-        .from('nova_social_content').select('hook,caption,cta,hashtags,episode_title')
-        .eq('episode_id', episode.id).maybeSingle()
-      if (sc) {
-        setHook(sc.hook ?? '')
-        setCaption(sc.caption ?? '')
-        setCta(sc.cta ?? '')
-        setHashtags(Array.isArray(sc.hashtags) ? sc.hashtags : [])
-        if (sc.episode_title) setPartTitle(sc.episode_title)
+
+      // Pre-populate title from episode fields immediately
+      const epTitle = (episode as unknown as Record<string,string>).episode_title || episode.heygen_title || showLabel
+      if (epTitle) setPartTitle(epTitle)
+
+      // 1. Try to load social content by episode_id
+      let sc: Record<string, string | string[]> | null = null
+      const { data: scByEp } = await supabase
+        .from('nova_social_content')
+        .select('hook,caption,cta,hashtags,episode_title')
+        .eq('episode_id', episode.id)
+        .maybeSingle()
+
+      if (scByEp && (scByEp.hook || scByEp.caption)) {
+        sc = scByEp
+      } else if (episode.script_id) {
+        // 2. Fall back to social content by script_id (pre-written content for this topic)
+        const { data: scByScript } = await supabase
+          .from('nova_social_content')
+          .select('hook,caption,cta,hashtags,episode_title')
+          .eq('script_id', episode.script_id)
+          .maybeSingle()
+        if (scByScript) sc = scByScript
       }
-      // 2. Fall back to show_scripts for title / post_date
+
+      if (sc) {
+        if (sc.hook) setHook(String(sc.hook))
+        if (sc.caption) setCaption(String(sc.caption))
+        if (sc.cta) setCta(String(sc.cta))
+        if (Array.isArray(sc.hashtags) && sc.hashtags.length > 0) setHashtags(sc.hashtags as string[])
+        if (sc.episode_title) setPartTitle(String(sc.episode_title))
+      }
+
+      // 3. Load show_scripts for date/time recommendation
       if (episode.script_id) {
         const { data: ss } = await supabase
-          .from('show_scripts').select('caption,part_title,series_part,post_date,post_time_utc')
-          .eq('id', episode.script_id).single()
+          .from('show_scripts')
+          .select('caption,part_title,series_part,post_date,post_time_utc')
+          .eq('id', episode.script_id)
+          .single()
         if (ss) {
+          // Only use script caption if no social content was found
           if (!sc?.caption && ss.caption) setCaption(ss.caption)
-          if (!sc?.episode_title && ss.part_title) setPartTitle(ss.part_title)
+          if (!sc?.episode_title && !epTitle && ss.part_title) setPartTitle(ss.part_title)
           const part = ss.series_part ?? null
           if (ss.post_date) {
             const postUtc = ss.post_time_utc ?? '13:00'
             const dt = new Date(`${ss.post_date}T${postUtc}:00Z`)
             const { date: d, time: t } = toLocalInputs(dt)
             setDate(d); setTime(t)
-            setRec(`From content calendar: ${ss.post_date} at ${postUtc} UTC`)
-          } else { recommend(part) }
-        } else { recommend(null) }
+            setRec(`📅 From content calendar: ${ss.post_date} at ${postUtc} UTC`)
+          } else {
+            recommend(part)
+          }
+        } else {
+          recommend(null)
+        }
       } else {
         recommend(null)
-        if (!partTitle) setPartTitle(episode.heygen_title || showLabel)
       }
+
       setLoading(false)
     }
     load()
