@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle, AlertCircle, Loader2, Palette, ExternalLink } from 'lucide-react'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+// Hardcoded — not a secret, prevents "Failed to fetch" when env var resolves to "undefined"
+const SUPABASE_URL = 'https://vzzzqsmqqaoilkmskadl.supabase.co'
 
 type Status = 'exchanging' | 'success' | 'error' | 'no_code'
 
@@ -25,7 +26,6 @@ export default function CanvaCallback() {
       return
     }
 
-    // Auto-exchange immediately — no manual copy needed
     ;(async () => {
       try {
         const r = await fetch(`${SUPABASE_URL}/functions/v1/canva-oauth`, {
@@ -37,7 +37,6 @@ export default function CanvaCallback() {
         if (d.success) {
           setScope(d.scope ?? '')
           setStatus('success')
-          // Clean URL
           window.history.replaceState({}, '', '/canva-callback')
         } else {
           setStatus('error')
@@ -54,7 +53,6 @@ export default function CanvaCallback() {
     <div className="min-h-screen bg-nova-navydark flex items-center justify-center p-6">
       <div className="max-w-md w-full space-y-6 text-center">
 
-        {/* Logo */}
         <div className="flex items-center gap-3 justify-center">
           <div className="w-10 h-10 rounded-xl bg-nova-gold flex items-center justify-center">
             <span className="font-display text-nova-navy text-2xl leading-none">N</span>
@@ -79,16 +77,14 @@ export default function CanvaCallback() {
             <CheckCircle size={48} className="text-nova-teal mx-auto" />
             <p className="font-display text-2xl text-nova-teal tracking-wide">CANVA CONNECTED</p>
             <p className="text-sm font-mono text-nova-muted leading-relaxed">
-              Refresh token stored in Supabase Vault.<br />
-              NOVA can now automatically generate fal.ai + Canva composite thumbnails.
+              Refresh token stored in Supabase.<br />
+              NOVA will now auto-generate fal.ai + Canva composite thumbnails.
             </p>
             {scope && (
-              <p className="text-xs font-mono text-nova-muted">
-                Scopes: {scope.replace(/ /g, ' · ')}
-              </p>
+              <p className="text-xs font-mono text-nova-muted">{scope.replace(/ /g, ' · ')}</p>
             )}
             <a href="/studio"
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-nova-navy text-sm font-body font-semibold transition-all hover:brightness-110"
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-nova-navy text-sm font-body font-semibold hover:brightness-110 transition-all"
               style={{ backgroundColor: '#C9A84C' }}>
               Go to Content Studio <ExternalLink size={14} />
             </a>
@@ -101,11 +97,9 @@ export default function CanvaCallback() {
             <p className="font-display text-xl text-nova-crimson tracking-wide">
               {status === 'no_code' ? 'NO CODE RECEIVED' : 'CONNECTION FAILED'}
             </p>
-            <p className="text-sm font-mono text-nova-muted">
-              {error || 'No authorization code found in URL.'}
-            </p>
+            <p className="text-sm font-mono text-nova-muted">{error || 'No authorization code found.'}</p>
             <p className="text-xs font-mono text-nova-muted leading-relaxed">
-              Go back to NOVA and generate a fresh auth URL from Settings → Canva Templates.
+              Go to Settings → Canva Templates → click <strong>Connect Canva</strong> to try again.
             </p>
             <a href="/settings"
               className="inline-flex items-center gap-2 px-5 py-2 rounded-xl border border-nova-border text-nova-muted text-sm font-body hover:text-white transition-all">
