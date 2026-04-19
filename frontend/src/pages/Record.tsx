@@ -502,6 +502,7 @@ export default function Record() {
 
             {thumbnailMode ? (
               /* Thumbnail mode preview */
+              <>
               <div className="relative rounded-2xl overflow-hidden bg-nova-navydark aspect-video border border-nova-gold/20 flex flex-col items-center justify-center gap-4">
                 {thumbnailUrl ? (
                   <>
@@ -555,28 +556,27 @@ export default function Record() {
                 )}
               </div>
               {/* Text overlay editor */}
-              {thumbnailMode && (
-                <div className="mt-3">
-                  <label className="text-xs font-mono text-nova-muted uppercase tracking-widest block mb-1">
-                    Thumbnail Text Overlay
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={overlayText}
-                      onChange={e => setOverlayText(e.target.value)}
-                      placeholder="Show name or episode title..."
-                      className="nova-input text-sm flex-1"
-                      maxLength={40}
-                    />
-                    <button
-                      onClick={() => setOverlayText('')}
-                      className="nova-btn-ghost text-xs px-3 py-1"
-                      title="Clear overlay text">✕</button>
-                  </div>
-                  <p className="text-[10px] font-mono text-nova-muted mt-1">Text is baked into the thumbnail during recording</p>
+              <div className="mt-3">
+                <label className="text-xs font-mono text-nova-muted uppercase tracking-widest block mb-1">
+                  Thumbnail Text Overlay
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={overlayText}
+                    onChange={e => setOverlayText(e.target.value)}
+                    placeholder="Show name or episode title..."
+                    className="nova-input text-sm flex-1"
+                    maxLength={40}
+                  />
+                  <button
+                    onClick={() => setOverlayText('')}
+                    className="nova-btn-ghost text-xs px-3 py-1"
+                    title="Clear overlay text">✕</button>
                 </div>
-              )}
+                <p className="text-[10px] font-mono text-nova-muted mt-1">Text is baked into the thumbnail during recording</p>
+              </div>
+              </>
             ) : (
               /* Camera preview */
               <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-nova-border/40">
