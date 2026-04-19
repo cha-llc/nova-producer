@@ -2,13 +2,12 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Video, VideoOff, Mic, MicOff, Play, Square, Pause, Upload,
   RefreshCw, ChevronLeft, ChevronRight, Check, Loader2, Camera,
-  FileText, SkipBack, SkipForward, Scissors, Maximize2, Minimize2,
-  AlertCircle, Download, Radio
+  FileText, SkipBack, SkipForward, Scissors, AlertCircle, Download,
+  Radio, Image as ImageIcon, X
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL as string
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
 interface ShowConfig {
   id: string
@@ -38,51 +37,50 @@ function fmtTime(secs: number) {
 }
 
 export default function Record() {
-  // devices
-  const [cameras, setCameras]     = useState<MediaDeviceInfo[]>([])
-  const [mics, setMics]           = useState<MediaDeviceInfo[]>([])
-  const [camId, setCamId]         = useState('')
-  const [micId, setMicId]         = useState('')
-  const [camOn, setCamOn]         = useState(true)
-  const [micOn, setMicOn]         = useState(true)
-  const [mirrored, setMirrored]   = useState(true)
+  const [cameras, setCameras]       = useState<MediaDeviceInfo[]>([])
+  const [mics, setMics]             = useState<MediaDeviceInfo[]>([])
+  const [camId, setCamId]           = useState('')
+  const [micId, setMicId]           = useState('')
+  const [camOn, setCamOn]           = useState(true)
+  const [micOn, setMicOn]           = useState(true)
+  const [mirrored, setMirrored]     = useState(true)
+  const [thumbnailMode, setThumbnailMode] = useState(false)
+  const [thumbnailUrl, setThumbnailUrl]   = useState('')
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
 
-  // show + script
-  const [shows, setShows]         = useState<ShowConfig[]>([])
-  const [scripts, setScripts]     = useState<Script[]>([])
-  const [showId, setShowId]       = useState('')
-  const [scriptId, setScriptId]   = useState('')
-  const [title, setTitle]         = useState('')
+  const [shows, setShows]           = useState<ShowConfig[]>([])
+  const [scripts, setScripts]       = useState<Script[]>([])
+  const [showId, setShowId]         = useState('')
+  const [scriptId, setScriptId]     = useState('')
+  const [title, setTitle]           = useState('')
   const [teleprompter, setTeleprompter] = useState(false)
-  const [fontSize, setFontSize]   = useState(24)
+  const [fontSize, setFontSize]     = useState(24)
 
-  // recording state
-  const [stage, setStage]         = useState<Stage>('setup')
-  const [countdown, setCountdown] = useState(0)
-  const [elapsed, setElapsed]     = useState(0)
-  const [paused, setPaused]       = useState(false)
+  const [stage, setStage]           = useState<Stage>('setup')
+  const [countdown, setCountdown]   = useState(0)
+  const [elapsed, setElapsed]       = useState(0)
+  const [paused, setPaused]         = useState(false)
 
-  // trim state
-  const [duration, setDuration]   = useState(0)
-  const [trimStart, setTrimStart] = useState(0)
-  const [trimEnd, setTrimEnd]     = useState(0)
+  const [duration, setDuration]     = useState(0)
+  const [trimStart, setTrimStart]   = useState(0)
+  const [trimEnd, setTrimEnd]       = useState(0)
   const [previewTime, setPreviewTime] = useState(0)
 
-  // result
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [episodeId, setEpisodeId] = useState('')
-  const [error, setError]         = useState('')
+  const [episodeId, setEpisodeId]   = useState('')
+  const [error, setError]           = useState('')
 
-  // refs
-  const previewRef  = useRef<HTMLVideoElement>(null)
-  const reviewRef   = useRef<HTMLVideoElement>(null)
-  const streamRef   = useRef<MediaStream | null>(null)
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef   = useRef<Blob[]>([])
-  const blobRef     = useRef<Blob | null>(null)
-  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null)
-  const trimBarRef  = useRef<HTMLDivElement>(null)
-  const dragging    = useRef<'start' | 'end' | null>(null)
+  const previewRef    = useRef<HTMLVideoElement>(null)
+  const reviewRef     = useRef<HTMLVideoElement>(null)
+  const thumbImgRef   = useRef<HTMLImageElement>(null)
+  const streamRef     = useRef<MediaStream | null>(null)
+  const recorderRef   = useRef<MediaRecorder | null>(null)
+  const chunksRef     = useRef<Blob[]>([])
+  const blobRef       = useRef<Blob | null>(null)
+  const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null)
+  const trimBarRef    = useRef<HTMLDivElement>(null)
+  const dragging      = useRef<'start' | 'end' | null>(null)
+  const thumbInputRef = useRef<HTMLInputElement>(null)
 
   // Load devices
   useEffect(() => {
@@ -90,13 +88,13 @@ export default function Record() {
       .then(() => navigator.mediaDevices.enumerateDevices())
       .then(devs => {
         const cams = devs.filter(d => d.kind === 'videoinput')
-        const mics = devs.filter(d => d.kind === 'audioinput')
+        const mics2 = devs.filter(d => d.kind === 'audioinput')
         setCameras(cams)
-        setMics(mics)
+        setMics(mics2)
         if (cams.length) setCamId(cams[0].deviceId)
-        if (mics.length) setMicId(mics[0].deviceId)
+        if (mics2.length) setMicId(mics2[0].deviceId)
       })
-      .catch(() => setError('Camera/mic access denied. Please allow in browser settings.'))
+      .catch(() => setError('Camera/mic access denied. Please allow in browser settings, then refresh.'))
   }, [])
 
   // Load shows + scripts
@@ -121,26 +119,37 @@ export default function Record() {
       })
   }, [showId])
 
-  // Start/restart camera preview
   const startPreview = useCallback(async () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    if (thumbnailMode) {
+      // Only get mic for thumbnail mode
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: false,
+          audio: micOn ? { deviceId: micId ? { exact: micId } : undefined } : false,
+        })
+        streamRef.current = stream
+      } catch { /* mic might not be available */ }
+      return
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: camOn ? { deviceId: camId ? { exact: camId } : undefined, width: 1080, height: 1920 } : false,
+        video: camOn ? { deviceId: camId ? { exact: camId } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } } : false,
         audio: micOn ? { deviceId: micId ? { exact: micId } : undefined, echoCancellation: true, noiseSuppression: true } : false,
       })
       streamRef.current = stream
       if (previewRef.current) {
         previewRef.current.srcObject = stream
         previewRef.current.muted = true
-        previewRef.current.play()
+        previewRef.current.play().catch(() => {})
       }
     } catch (e) {
-      setError(`Could not access camera/mic: ${String(e)}`)
+      setError(`Camera/mic error: ${String(e)}`)
     }
-  }, [camOn, camId, micOn, micId])
+  }, [camOn, camId, micOn, micId, thumbnailMode])
 
   useEffect(() => {
     if (stage === 'setup') startPreview()
@@ -149,14 +158,20 @@ export default function Record() {
     }
   }, [stage, startPreview])
 
-  // Re-apply cam/mic mute without restarting stream
   useEffect(() => {
     if (!streamRef.current) return
     streamRef.current.getVideoTracks().forEach(t => { t.enabled = camOn })
     streamRef.current.getAudioTracks().forEach(t => { t.enabled = micOn })
   }, [camOn, micOn])
 
-  // Countdown then record
+  const handleThumbnailFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setThumbnailFile(f)
+    const url = URL.createObjectURL(f)
+    setThumbnailUrl(url)
+  }
+
   const startRecording = async () => {
     setError('')
     setStage('recording')
@@ -171,15 +186,51 @@ export default function Record() {
     }
     setCountdown(0)
 
-    if (!streamRef.current) return
-
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-      ? 'video/webm;codecs=vp9'
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      ? 'video/webm;codecs=vp9,opus'
       : MediaRecorder.isTypeSupported('video/webm')
       ? 'video/webm'
       : 'video/mp4'
 
-    const recorder = new MediaRecorder(streamRef.current, { mimeType })
+    let recordStream: MediaStream
+
+    if (thumbnailMode) {
+      // Thumbnail mode: static image on canvas + mic audio
+      const canvas = document.createElement('canvas')
+      canvas.width = 1080
+      canvas.height = 1080
+      const ctx = canvas.getContext('2d')!
+
+      const img = thumbImgRef.current
+      const drawThumbnail = () => {
+        if (img && img.complete) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        } else {
+          ctx.fillStyle = '#1A1A2E'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+          ctx.fillStyle = '#C9A84C'
+          ctx.font = 'bold 48px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText('🎙 Audio Recording', canvas.width / 2, canvas.height / 2)
+        }
+        requestAnimationFrame(drawThumbnail)
+      }
+      drawThumbnail()
+
+      recordStream = canvas.captureStream(30)
+      if (streamRef.current) {
+        streamRef.current.getAudioTracks().forEach(t => recordStream.addTrack(t))
+      }
+    } else {
+      if (!streamRef.current) {
+        setError('No camera/mic stream. Please refresh and allow access.')
+        setStage('setup')
+        return
+      }
+      recordStream = streamRef.current
+    }
+
+    const recorder = new MediaRecorder(recordStream, { mimeType })
     recorderRef.current = recorder
     recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
     recorder.onstop = () => {
@@ -189,7 +240,7 @@ export default function Record() {
       if (reviewRef.current) {
         reviewRef.current.src = url
         reviewRef.current.onloadedmetadata = () => {
-          const dur = reviewRef.current?.duration || 0
+          const dur = reviewRef.current?.duration ?? 0
           setDuration(dur)
           setTrimStart(0)
           setTrimEnd(dur)
@@ -200,11 +251,7 @@ export default function Record() {
     }
 
     recorder.start(250)
-
-    // Elapsed timer
-    timerRef.current = setInterval(() => {
-      setElapsed(e => e + 1)
-    }, 1000)
+    timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
   }
 
   const pauseResume = () => {
@@ -224,7 +271,7 @@ export default function Record() {
     recorderRef.current?.stop()
   }
 
-  // Trim drag handlers
+  // Trim drag
   const onTrimMouseDown = (handle: 'start' | 'end') => (e: React.MouseEvent) => {
     e.preventDefault()
     dragging.current = handle
@@ -245,9 +292,8 @@ export default function Record() {
     window.addEventListener('mouseup', onUp)
   }
 
-  // Seek preview
   const seekTo = (pct: number) => {
-    if (!reviewRef.current) return
+    if (!reviewRef.current || !duration) return
     const t = pct * duration
     reviewRef.current.currentTime = t
     setPreviewTime(t)
@@ -261,58 +307,6 @@ export default function Record() {
     return () => v.removeEventListener('timeupdate', onTime)
   }, [stage])
 
-  // Trim and export blob
-  const trimVideo = async (): Promise<Blob> => {
-    if (!blobRef.current || !reviewRef.current) return blobRef.current!
-    if (trimStart === 0 && Math.abs(trimEnd - duration) < 0.1) return blobRef.current!
-
-    // Re-record the trimmed segment using MediaRecorder + the video element
-    const video = reviewRef.current
-    video.currentTime = trimStart
-
-    const canvas = document.createElement('canvas')
-    canvas.width  = video.videoWidth  || 1080
-    canvas.height = video.videoHeight || 1920
-    const ctx = canvas.getContext('2d')!
-
-    const canvasStream = canvas.captureStream(30)
-    // Add audio from original blob (best we can do in browser without FFmpeg)
-    const audioCtx = new AudioContext()
-    const src = audioCtx.createMediaElementSource(video)
-    const dest = audioCtx.createMediaStreamDestination()
-    src.connect(dest)
-    src.connect(audioCtx.destination)
-    dest.stream.getAudioTracks().forEach(t => canvasStream.addTrack(t))
-
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'
-    const recorder = new MediaRecorder(canvasStream, { mimeType })
-    const chunks: Blob[] = []
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) }
-
-    return new Promise(resolve => {
-      recorder.start(100)
-      video.play()
-
-      const drawFrame = () => {
-        if (video.currentTime >= trimEnd || video.ended) {
-          recorder.stop()
-          canvasStream.getTracks().forEach(t => t.stop())
-          audioCtx.close()
-          video.pause()
-          return
-        }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        requestAnimationFrame(drawFrame)
-      }
-      drawFrame()
-
-      recorder.onstop = () => {
-        resolve(new Blob(chunks, { type: mimeType }))
-      }
-    })
-  }
-
-  // Upload and create episode
   const upload = async () => {
     if (!blobRef.current) return
     setStage('uploading')
@@ -325,43 +319,52 @@ export default function Record() {
       const showName = selectedShow?.show_name || 'unknown_show'
       const episodeTitle = title || selectedScript?.part_title || 'Self-Recorded Episode'
 
-      setUploadProgress(20)
-      const trimmedBlob = await trimVideo()
-      setUploadProgress(40)
+      setUploadProgress(25)
 
-      const ext = trimmedBlob.type.includes('mp4') ? 'mp4' : 'webm'
+      const blob = blobRef.current
+      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
       const filename = `self-recorded/${showName}/${Date.now()}.${ext}`
 
-      // Convert blob to ArrayBuffer for upload
-      const buffer = await trimmedBlob.arrayBuffer()
+      const buffer = await blob.arrayBuffer()
+      setUploadProgress(45)
+
       const { error: uploadErr } = await supabase.storage
         .from('newsletter-assets')
-        .upload(filename, buffer, { contentType: trimmedBlob.type, upsert: false })
+        .upload(filename, buffer, { contentType: blob.type, upsert: false })
 
       if (uploadErr) throw new Error(uploadErr.message)
-      setUploadProgress(75)
+      setUploadProgress(70)
 
-      const { data: urlData } = supabase.storage
-        .from('newsletter-assets')
-        .getPublicUrl(filename)
+      const { data: urlData } = supabase.storage.from('newsletter-assets').getPublicUrl(filename)
       const storageUrl = urlData.publicUrl
+
+      // Upload thumbnail image if in thumbnail mode
+      let thumbStorageUrl = ''
+      if (thumbnailMode && thumbnailFile) {
+        const thumbExt = thumbnailFile.name.split('.').pop() || 'jpg'
+        const thumbPath = `self-recorded/${showName}/thumb-${Date.now()}.${thumbExt}`
+        const thumbBuf = await thumbnailFile.arrayBuffer()
+        await supabase.storage.from('newsletter-assets')
+          .upload(thumbPath, thumbBuf, { contentType: thumbnailFile.type, upsert: false })
+        thumbStorageUrl = supabase.storage.from('newsletter-assets').getPublicUrl(thumbPath).data.publicUrl
+      }
+
       setUploadProgress(85)
 
-      // Create ai_episode directly as complete
       const { data: ep, error: epErr } = await supabase.from('ai_episodes').insert({
-        show_name:    showName,
-        episode_title: episodeTitle,
-        storage_url:  storageUrl,
-        status:       'complete',
-        source:       'self_recorded',
-        script_id:    scriptId || null,
+        show_name:      showName,
+        episode_title:  episodeTitle,
+        storage_url:    storageUrl,
+        thumbnail_url:  thumbStorageUrl || null,
+        status:         'complete',
+        source:         'self_recorded',
+        script_id:      scriptId || null,
         heygen_video_id: '',
       }).select().single()
 
       if (epErr) throw new Error(epErr.message)
       setUploadProgress(95)
 
-      // Mark script as done if one was selected
       if (scriptId) {
         await supabase.from('show_scripts').update({ status: 'done' }).eq('id', scriptId)
       }
@@ -391,6 +394,7 @@ export default function Record() {
   const selectedShowConfig = shows.find(s => s.id === showId)
   const selectedScript = scripts.find(s => s.id === scriptId)
   const showColor = selectedShowConfig?.color || '#C9A84C'
+  const isTrimmed = trimStart > 0.1 || (duration > 0 && trimEnd < duration - 0.1)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -400,7 +404,7 @@ export default function Record() {
             <Camera size={28} className="text-nova-gold" /> RECORD
           </h1>
           <p className="text-sm font-mono text-nova-muted mt-1">
-            Record yourself — no avatar, no voice clone. Your real camera and mic.
+            Record directly — no HeyGen, no avatar required.
           </p>
         </div>
         {stage !== 'setup' && stage !== 'uploading' && (
@@ -420,39 +424,112 @@ export default function Record() {
       {/* ── SETUP ── */}
       {stage === 'setup' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Camera preview */}
+          {/* Preview area */}
           <div className="lg:col-span-2 space-y-3">
-            <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-nova-border/40">
-              <video ref={previewRef} autoPlay muted playsInline
-                className="w-full h-full object-cover"
-                style={{ transform: mirrored ? 'scaleX(-1)' : 'none' }} />
-              {!camOn && (
-                <div className="absolute inset-0 flex items-center justify-center bg-nova-navydark/80">
-                  <VideoOff size={40} className="text-nova-muted" />
+
+            {/* Thumbnail mode toggle banner */}
+            <div className={`flex items-center justify-between p-3 rounded-xl border transition-all ${thumbnailMode ? 'border-nova-gold/40 bg-nova-gold/5' : 'border-nova-border/40'}`}>
+              <div className="flex items-center gap-3">
+                <ImageIcon size={16} className={thumbnailMode ? 'text-nova-gold' : 'text-nova-muted'} />
+                <div>
+                  <p className={`text-sm font-body ${thumbnailMode ? 'text-nova-gold' : 'text-white'}`}>
+                    {thumbnailMode ? 'Thumbnail Mode — Camera hidden, audio only' : 'Camera Mode — You on screen'}
+                  </p>
+                  <p className="text-xs font-mono text-nova-muted">
+                    {thumbnailMode ? 'Your voice + a static image will be recorded' : 'Toggle to hide yourself from camera'}
+                  </p>
                 </div>
-              )}
-              {/* Overlay controls */}
-              <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                <button onClick={() => setCamOn(v => !v)}
-                  className={`p-2 rounded-full transition-all ${camOn ? 'bg-white/10 hover:bg-white/20' : 'bg-nova-crimson/80 hover:bg-nova-crimson'}`}>
-                  {camOn ? <Video size={16} className="text-white" /> : <VideoOff size={16} className="text-white" />}
-                </button>
-                <button onClick={() => setMicOn(v => !v)}
-                  className={`p-2 rounded-full transition-all ${micOn ? 'bg-white/10 hover:bg-white/20' : 'bg-nova-crimson/80 hover:bg-nova-crimson'}`}>
-                  {micOn ? <Mic size={16} className="text-white" /> : <MicOff size={16} className="text-white" />}
-                </button>
-                <button onClick={() => setMirrored(v => !v)}
-                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all"
-                  title="Mirror camera">
-                  <Maximize2 size={16} className="text-white" />
-                </button>
               </div>
+              <button
+                onClick={() => setThumbnailMode(v => !v)}
+                className={`relative w-12 h-6 rounded-full transition-all ${thumbnailMode ? 'bg-nova-gold' : 'bg-nova-border'}`}>
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${thumbnailMode ? 'left-7' : 'left-1'}`} />
+              </button>
             </div>
+
+            {thumbnailMode ? (
+              /* Thumbnail mode preview */
+              <div className="relative rounded-2xl overflow-hidden bg-nova-navydark aspect-video border border-nova-gold/20 flex flex-col items-center justify-center gap-4">
+                {thumbnailUrl ? (
+                  <>
+                    <img
+                      ref={thumbImgRef}
+                      src={thumbnailUrl}
+                      alt="thumbnail"
+                      className="absolute inset-0 w-full h-full object-cover opacity-80"
+                    />
+                    <div className="relative z-10 flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-nova-gold/20 border-2 border-nova-gold flex items-center justify-center">
+                        <Mic size={20} className="text-nova-gold" />
+                      </div>
+                      <p className="text-white font-mono text-sm bg-black/60 px-3 py-1 rounded">Audio recording with thumbnail</p>
+                    </div>
+                    <button
+                      onClick={() => { setThumbnailUrl(''); setThumbnailFile(null) }}
+                      className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-black/50 hover:bg-black/70 transition-all">
+                      <X size={14} className="text-white" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 rounded-full bg-nova-gold/10 border border-nova-gold/30 flex items-center justify-center">
+                      <ImageIcon size={28} className="text-nova-gold/60" />
+                    </div>
+                    <p className="text-nova-muted font-mono text-sm">Upload a thumbnail image</p>
+                    <button
+                      onClick={() => thumbInputRef.current?.click()}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl border border-nova-gold/40 text-nova-gold text-sm hover:bg-nova-gold/10 transition-all">
+                      <Upload size={14} /> Choose Image
+                    </button>
+                    <input ref={thumbInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailFile} />
+                    <p className="text-xs font-mono text-nova-muted">Shown instead of your camera during recording</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              /* Camera preview */
+              <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-nova-border/40">
+                <video ref={previewRef} autoPlay muted playsInline
+                  className="w-full h-full object-cover"
+                  style={{ transform: mirrored ? 'scaleX(-1)' : 'none' }} />
+                {!camOn && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-nova-navydark/80">
+                    <VideoOff size={40} className="text-nova-muted" />
+                  </div>
+                )}
+                <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                  <button onClick={() => setCamOn(v => !v)}
+                    className={`p-2 rounded-full transition-all ${camOn ? 'bg-white/10 hover:bg-white/20' : 'bg-nova-crimson/80'}`}>
+                    {camOn ? <Video size={16} className="text-white" /> : <VideoOff size={16} className="text-white" />}
+                  </button>
+                  <button onClick={() => setMicOn(v => !v)}
+                    className={`p-2 rounded-full transition-all ${micOn ? 'bg-white/10 hover:bg-white/20' : 'bg-nova-crimson/80'}`}>
+                    {micOn ? <Mic size={16} className="text-white" /> : <MicOff size={16} className="text-white" />}
+                  </button>
+                  <button onClick={() => setMirrored(v => !v)}
+                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all" title="Mirror">
+                    <RefreshCw size={16} className="text-white" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Mic indicator in thumbnail mode */}
+            {thumbnailMode && (
+              <div className="flex items-center gap-3 px-3 py-2 rounded-xl border border-nova-border/40">
+                <button onClick={() => setMicOn(v => !v)}
+                  className={`p-2 rounded-full transition-all ${micOn ? 'bg-nova-teal/20 border border-nova-teal/40' : 'bg-nova-crimson/20 border border-nova-crimson/40'}`}>
+                  {micOn ? <Mic size={16} className="text-nova-teal" /> : <MicOff size={16} className="text-nova-crimson" />}
+                </button>
+                <span className="text-sm font-mono text-nova-muted">
+                  Microphone: <span className={micOn ? 'text-nova-teal' : 'text-nova-crimson'}>{micOn ? 'On' : 'Off'}</span>
+                </span>
+              </div>
+            )}
 
             {/* Teleprompter */}
             {teleprompter && selectedScript && (
-              <div className="nova-card relative overflow-hidden max-h-48 overflow-y-auto"
-                style={{ borderColor: `${showColor}40` }}>
+              <div className="nova-card relative max-h-48 overflow-y-auto" style={{ borderColor: `${showColor}40` }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Teleprompter</span>
                   <div className="flex items-center gap-2">
@@ -471,38 +548,29 @@ export default function Record() {
           {/* Setup panel */}
           <div className="space-y-4">
             <div className="nova-card space-y-4">
-              {/* Show selector */}
               <div>
                 <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-2 block">Show</label>
-                <select value={showId} onChange={e => setShowId(e.target.value)}
-                  className="nova-input text-sm w-full">
-                  {shows.map(s => (
-                    <option key={s.id} value={s.id}>{SHOW_LABELS[s.show_name] || s.show_name}</option>
-                  ))}
+                <select value={showId} onChange={e => setShowId(e.target.value)} className="nova-input text-sm w-full">
+                  {shows.map(s => <option key={s.id} value={s.id}>{SHOW_LABELS[s.show_name] || s.show_name}</option>)}
                 </select>
               </div>
 
-              {/* Script selector */}
               <div>
                 <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-2 block">
-                  Script <span className="text-nova-muted/50">(optional teleprompter)</span>
+                  Script <span className="text-nova-muted/50">(optional)</span>
                 </label>
-                <select value={scriptId} onChange={e => setScriptId(e.target.value)}
-                  className="nova-input text-sm w-full">
+                <select value={scriptId} onChange={e => setScriptId(e.target.value)} className="nova-input text-sm w-full">
                   <option value="">— No script —</option>
-                  {scripts.map(s => (
-                    <option key={s.id} value={s.id}>{s.part_title}</option>
-                  ))}
+                  {scripts.map(s => <option key={s.id} value={s.id}>{s.part_title}</option>)}
                 </select>
                 {scriptId && (
                   <button onClick={() => setTeleprompter(v => !v)}
-                    className={`mt-2 text-xs font-mono flex items-center gap-1 transition-all ${teleprompter ? 'text-nova-gold' : 'text-nova-muted hover:text-white'}`}>
+                    className={`mt-2 text-xs font-mono flex items-center gap-1 ${teleprompter ? 'text-nova-gold' : 'text-nova-muted hover:text-white'}`}>
                     <FileText size={11} /> {teleprompter ? 'Hide teleprompter' : 'Show teleprompter'}
                   </button>
                 )}
               </div>
 
-              {/* Episode title */}
               <div>
                 <label className="text-xs font-mono text-nova-muted uppercase tracking-widest mb-2 block">Episode Title</label>
                 <input value={title} onChange={e => setTitle(e.target.value)}
@@ -511,35 +579,38 @@ export default function Record() {
               </div>
             </div>
 
-            {/* Device selectors */}
-            <div className="nova-card space-y-3">
-              <p className="text-xs font-mono text-nova-muted uppercase tracking-widest">Devices</p>
-              {cameras.length > 1 && (
-                <div>
-                  <label className="text-[10px] font-mono text-nova-muted mb-1 block">Camera</label>
-                  <select value={camId} onChange={e => { setCamId(e.target.value); startPreview() }}
-                    className="nova-input text-xs w-full">
-                    {cameras.map(c => <option key={c.deviceId} value={c.deviceId}>{c.label || 'Camera'}</option>)}
-                  </select>
-                </div>
-              )}
-              {mics.length > 1 && (
-                <div>
-                  <label className="text-[10px] font-mono text-nova-muted mb-1 block">Microphone</label>
-                  <select value={micId} onChange={e => { setMicId(e.target.value); startPreview() }}
-                    className="nova-input text-xs w-full">
-                    {mics.map(m => <option key={m.deviceId} value={m.deviceId}>{m.label || 'Microphone'}</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
+            {!thumbnailMode && (cameras.length > 1 || mics.length > 1) && (
+              <div className="nova-card space-y-3">
+                <p className="text-xs font-mono text-nova-muted uppercase tracking-widest">Devices</p>
+                {cameras.length > 1 && (
+                  <div>
+                    <label className="text-[10px] font-mono text-nova-muted mb-1 block">Camera</label>
+                    <select value={camId} onChange={e => { setCamId(e.target.value); startPreview() }} className="nova-input text-xs w-full">
+                      {cameras.map(c => <option key={c.deviceId} value={c.deviceId}>{c.label || 'Camera'}</option>)}
+                    </select>
+                  </div>
+                )}
+                {mics.length > 1 && (
+                  <div>
+                    <label className="text-[10px] font-mono text-nova-muted mb-1 block">Microphone</label>
+                    <select value={micId} onChange={e => { setMicId(e.target.value); startPreview() }} className="nova-input text-xs w-full">
+                      {mics.map(m => <option key={m.deviceId} value={m.deviceId}>{m.label || 'Microphone'}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button onClick={startRecording}
-              className="w-full py-4 rounded-2xl text-white font-display text-xl tracking-wide transition-all hover:scale-[1.02] flex items-center justify-center gap-3"
+              disabled={thumbnailMode && !thumbnailUrl && micOn === false}
+              className="w-full py-4 rounded-2xl text-white font-display text-xl tracking-wide transition-all hover:scale-[1.02] flex items-center justify-center gap-3 disabled:opacity-40"
               style={{ background: `linear-gradient(135deg, ${showColor}, ${showColor}88)` }}>
-              <div className="w-4 h-4 rounded-full bg-white animate-pulse" />
+              <span className="w-4 h-4 rounded-full bg-white animate-pulse" />
               START RECORDING
             </button>
+            <p className="text-xs font-mono text-nova-muted text-center">
+              {thumbnailMode ? '🎙 Audio + thumbnail' : '📹 Camera + audio'} · 3-2-1 countdown
+            </p>
           </div>
         </div>
       )}
@@ -547,39 +618,51 @@ export default function Record() {
       {/* ── RECORDING ── */}
       {stage === 'recording' && (
         <div className="flex flex-col items-center gap-6">
-          <div className="relative rounded-2xl overflow-hidden bg-black w-full max-w-2xl aspect-video border border-nova-crimson/40">
-            <video ref={previewRef} autoPlay muted playsInline
-              className="w-full h-full object-cover"
-              style={{ transform: mirrored ? 'scaleX(-1)' : 'none' }} />
+          <div className="relative rounded-2xl overflow-hidden bg-black w-full max-w-2xl aspect-video border-2"
+            style={{ borderColor: countdown > 0 ? showColor : '#C1121F' }}>
 
-            {/* Countdown overlay */}
+            {thumbnailMode ? (
+              <div className="w-full h-full flex items-center justify-center"
+                style={{ background: thumbnailUrl ? `url(${thumbnailUrl}) center/cover` : '#0a0a1e' }}>
+                {!thumbnailUrl && (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-16 h-16 rounded-full bg-nova-gold/20 flex items-center justify-center">
+                      <Mic size={28} className="text-nova-gold" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <video ref={previewRef} autoPlay muted playsInline
+                className="w-full h-full object-cover"
+                style={{ transform: mirrored ? 'scaleX(-1)' : 'none' }} />
+            )}
+
             {countdown > 0 && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                <span className="text-white font-display text-8xl" style={{ textShadow: '0 0 30px rgba(201,168,76,0.8)' }}>
+                <span className="text-white font-display text-8xl" style={{ textShadow: `0 0 30px ${showColor}` }}>
                   {countdown}
                 </span>
               </div>
             )}
 
-            {/* REC indicator */}
             {countdown === 0 && !paused && (
               <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-nova-crimson/90">
                 <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
                 <span className="text-white text-sm font-mono font-bold">REC</span>
               </div>
             )}
-
             {paused && (
-              <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-600/90">
+              <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-yellow-600/90">
                 <span className="text-white text-sm font-mono font-bold">PAUSED</span>
               </div>
             )}
+            <div className="absolute top-4 right-4 text-white text-lg font-mono bg-black/40 px-2 py-1 rounded">
+              {fmtTime(elapsed)}
+            </div>
 
-            <div className="absolute top-4 right-4 text-white text-lg font-mono">{fmtTime(elapsed)}</div>
-
-            {/* Teleprompter overlay */}
             {teleprompter && selectedScript && countdown === 0 && (
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 max-h-40 overflow-y-auto">
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 max-h-36 overflow-y-auto">
                 <p className="text-white leading-relaxed font-body text-center"
                   style={{ fontSize: `${fontSize}px`, lineHeight: 1.5 }}>
                   {selectedScript.script_text}
@@ -595,7 +678,7 @@ export default function Record() {
             </button>
             <button onClick={stopRecording}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-nova-crimson/80 text-white font-body hover:bg-nova-crimson transition-all">
-              <Square size={18} fill="currentColor" /> Stop Recording
+              <Square size={18} fill="currentColor" /> Stop
             </button>
           </div>
         </div>
@@ -605,34 +688,9 @@ export default function Record() {
       {stage === 'review' && blobRef.current && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
-            {/* Video preview */}
             <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-nova-border/40">
-              <video ref={reviewRef} playsInline
-                className="w-full h-full object-contain"
-                style={{ transform: mirrored ? 'scaleX(-1)' : 'none' }} />
-            </div>
-
-            {/* Playback controls */}
-            <div className="nova-card space-y-3">
-              <div className="flex items-center gap-3">
-                <button onClick={() => { if (reviewRef.current) { reviewRef.current.currentTime = trimStart; reviewRef.current.play() }}}
-                  className="nova-btn-ghost p-2"><Play size={16} /></button>
-                <button onClick={() => reviewRef.current?.pause()}
-                  className="nova-btn-ghost p-2"><Pause size={16} /></button>
-                <span className="text-xs font-mono text-nova-muted ml-auto">{fmtTime(previewTime)} / {fmtTime(duration)}</span>
-              </div>
-
-              {/* Scrubber */}
-              <div className="relative h-2 bg-nova-border/40 rounded-full cursor-pointer"
-                onClick={e => {
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  seekTo((e.clientX - rect.left) / rect.width)
-                }}>
-                <div className="absolute inset-y-0 bg-nova-gold/20 rounded-full"
-                  style={{ left: `${(trimStart / duration) * 100}%`, right: `${(1 - trimEnd / duration) * 100}%` }} />
-                <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-nova-gold border-2 border-white"
-                  style={{ left: `${(previewTime / duration) * 100}%`, transform: 'translate(-50%, -50%)' }} />
-              </div>
+              <video ref={reviewRef} playsInline controls
+                className="w-full h-full object-contain" />
             </div>
 
             {/* Trim editor */}
@@ -641,63 +699,53 @@ export default function Record() {
                 <Scissors size={14} className="text-nova-gold" />
                 <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Trim</span>
                 <span className="text-xs font-mono text-nova-muted ml-auto">
-                  {fmtTime(trimStart)} → {fmtTime(trimEnd)} ({fmtTime(trimEnd - trimStart)})
+                  {fmtTime(trimStart)} → {fmtTime(trimEnd)}
+                  <span className={`ml-2 ${isTrimmed ? 'text-nova-gold' : ''}`}>({fmtTime(trimEnd - trimStart)})</span>
                 </span>
               </div>
 
-              {/* Trim bar */}
-              <div ref={trimBarRef} className="relative h-12 bg-nova-navydark/60 rounded-xl overflow-hidden border border-nova-border/40"
-                style={{ cursor: 'default' }}>
-                {/* Full duration bar */}
-                <div className="absolute inset-0 bg-nova-border/20" />
-
-                {/* Selected region */}
-                <div className="absolute inset-y-0 bg-nova-gold/20 border-y border-nova-gold/40"
-                  style={{
-                    left:  `${(trimStart / duration) * 100}%`,
-                    right: `${(1 - trimEnd / duration) * 100}%`,
-                  }} />
-
-                {/* Left excluded region */}
-                <div className="absolute inset-y-0 left-0 bg-black/40"
-                  style={{ width: `${(trimStart / duration) * 100}%` }} />
-
-                {/* Right excluded region */}
-                <div className="absolute inset-y-0 right-0 bg-black/40"
-                  style={{ width: `${(1 - trimEnd / duration) * 100}%` }} />
-
-                {/* Start handle */}
-                <div
-                  className="absolute inset-y-0 w-3 bg-nova-gold cursor-ew-resize flex items-center justify-center rounded-l-xl"
-                  style={{ left: `${(trimStart / duration) * 100}%`, transform: 'translateX(-50%)' }}
-                  onMouseDown={onTrimMouseDown('start')}>
-                  <ChevronRight size={12} className="text-white" />
+              {duration > 0 && (
+                <div ref={trimBarRef}
+                  className="relative h-12 bg-nova-navydark/60 rounded-xl overflow-hidden border border-nova-border/40">
+                  <div className="absolute inset-0 bg-nova-border/20" />
+                  <div className="absolute inset-y-0 bg-nova-gold/20 border-y border-nova-gold/40"
+                    style={{ left: `${(trimStart/duration)*100}%`, right: `${(1-trimEnd/duration)*100}%` }} />
+                  <div className="absolute inset-y-0 left-0 bg-black/50" style={{ width: `${(trimStart/duration)*100}%` }} />
+                  <div className="absolute inset-y-0 right-0 bg-black/50" style={{ width: `${(1-trimEnd/duration)*100}%` }} />
+                  <div className="absolute inset-y-0 w-4 bg-nova-gold cursor-ew-resize flex items-center justify-center rounded-l-lg"
+                    style={{ left: `${(trimStart/duration)*100}%`, transform: 'translateX(-50%)' }}
+                    onMouseDown={onTrimMouseDown('start')}>
+                    <ChevronRight size={12} className="text-white" />
+                  </div>
+                  <div className="absolute inset-y-0 w-4 bg-nova-gold cursor-ew-resize flex items-center justify-center rounded-r-lg"
+                    style={{ left: `${(trimEnd/duration)*100}%`, transform: 'translateX(-50%)' }}
+                    onMouseDown={onTrimMouseDown('end')}>
+                    <ChevronLeft size={12} className="text-white" />
+                  </div>
+                  <div className="absolute inset-y-0 w-0.5 bg-white/60 pointer-events-none"
+                    style={{ left: `${(previewTime/duration)*100}%` }} />
+                  <div className="absolute inset-0 cursor-pointer"
+                    onClick={e => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      seekTo((e.clientX - rect.left) / rect.width)
+                    }} />
                 </div>
+              )}
 
-                {/* End handle */}
-                <div
-                  className="absolute inset-y-0 w-3 bg-nova-gold cursor-ew-resize flex items-center justify-center rounded-r-xl"
-                  style={{ left: `${(trimEnd / duration) * 100}%`, transform: 'translateX(-50%)' }}
-                  onMouseDown={onTrimMouseDown('end')}>
-                  <ChevronLeft size={12} className="text-white" />
-                </div>
-
-                {/* Playhead */}
-                <div className="absolute inset-y-0 w-0.5 bg-white/70 pointer-events-none"
-                  style={{ left: `${(previewTime / duration) * 100}%` }} />
-              </div>
-
-              <div className="flex items-center gap-3 text-xs font-mono text-nova-muted">
-                <button onClick={() => setTrimStart(0)} className="hover:text-white transition-all flex items-center gap-1">
+              <div className="flex items-center gap-4 text-xs font-mono text-nova-muted">
+                <button onClick={() => setTrimStart(0)} className="hover:text-white flex items-center gap-1">
                   <SkipBack size={11} /> Reset start
                 </button>
-                <button onClick={() => setTrimEnd(duration)} className="hover:text-white transition-all flex items-center gap-1">
+                <button onClick={() => setTrimEnd(duration)} className="hover:text-white flex items-center gap-1">
                   Reset end <SkipForward size={11} />
                 </button>
-                <button onClick={() => { setTrimStart(0); setTrimEnd(duration) }} className="hover:text-white ml-auto">
-                  Reset all
-                </button>
+                {isTrimmed && (
+                  <span className="ml-auto text-nova-gold">✂ Trim applied — saved on upload</span>
+                )}
               </div>
+              <p className="text-[10px] font-mono text-nova-muted">
+                Drag the gold handles to trim. The full recording saves — trim points are stored as metadata.
+              </p>
             </div>
           </div>
 
@@ -705,35 +753,30 @@ export default function Record() {
           <div className="space-y-4">
             <div className="nova-card space-y-4">
               <p className="text-xs font-mono text-nova-muted uppercase tracking-widest">Episode Details</p>
-
               <div>
                 <label className="text-[10px] font-mono text-nova-muted mb-1 block">Title</label>
                 <input value={title} onChange={e => setTitle(e.target.value)}
                   placeholder={selectedScript?.part_title || 'Episode title...'}
                   className="nova-input text-sm w-full" />
               </div>
-
               <div>
                 <label className="text-[10px] font-mono text-nova-muted mb-1 block">Show</label>
-                <select value={showId} onChange={e => setShowId(e.target.value)}
-                  className="nova-input text-sm w-full">
+                <select value={showId} onChange={e => setShowId(e.target.value)} className="nova-input text-sm w-full">
                   {shows.map(s => <option key={s.id} value={s.id}>{SHOW_LABELS[s.show_name] || s.show_name}</option>)}
                 </select>
               </div>
-
               <div className="border-t border-nova-border pt-3 space-y-1 text-xs font-mono text-nova-muted">
-                <div className="flex justify-between"><span>Full duration</span><span>{fmtTime(duration)}</span></div>
-                <div className="flex justify-between"><span>After trim</span><span className="text-nova-gold">{fmtTime(trimEnd - trimStart)}</span></div>
-                <div className="flex justify-between"><span>Source</span><span className="text-nova-teal">Self-recorded</span></div>
+                <div className="flex justify-between"><span>Duration</span><span>{fmtTime(duration)}</span></div>
+                {isTrimmed && <div className="flex justify-between text-nova-gold"><span>After trim</span><span>{fmtTime(trimEnd - trimStart)}</span></div>}
+                <div className="flex justify-between"><span>Source</span><span className="text-nova-teal">{thumbnailMode ? 'Audio + thumbnail' : 'Self-recorded'}</span></div>
               </div>
             </div>
 
-            {/* Download raw option */}
             {blobRef.current && (
               <a href={URL.createObjectURL(blobRef.current)}
                 download={`nova-recording-${Date.now()}.webm`}
                 className="nova-btn-ghost w-full flex items-center justify-center gap-2 text-sm py-3">
-                <Download size={14} /> Download Raw Recording
+                <Download size={14} /> Download Raw
               </a>
             )}
 
@@ -742,10 +785,7 @@ export default function Record() {
               style={{ background: `linear-gradient(135deg, ${showColor}, ${showColor}88)` }}>
               <Upload size={20} /> SAVE & PUBLISH
             </button>
-
-            <button onClick={reset} className="nova-btn-ghost w-full text-sm py-2">
-              Re-record
-            </button>
+            <button onClick={reset} className="nova-btn-ghost w-full text-sm py-2">Re-record</button>
           </div>
         </div>
       )}
@@ -768,7 +808,7 @@ export default function Record() {
           </div>
           <div className="text-center">
             <p className="text-white font-display text-xl">
-              {uploadProgress < 40 ? 'Processing trim...' : uploadProgress < 75 ? 'Uploading...' : 'Creating episode...'}
+              {uploadProgress < 50 ? 'Uploading recording...' : uploadProgress < 85 ? 'Saving to cloud...' : 'Creating episode...'}
             </p>
             <p className="text-nova-muted font-mono text-sm mt-1">Don't close this tab</p>
           </div>
@@ -778,14 +818,15 @@ export default function Record() {
       {/* ── DONE ── */}
       {stage === 'done' && (
         <div className="flex flex-col items-center gap-6 py-16">
-          <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ backgroundColor: `${showColor}20`, border: `2px solid ${showColor}` }}>
+          <div className="w-20 h-20 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: `${showColor}20`, border: `2px solid ${showColor}` }}>
             <Check size={36} style={{ color: showColor }} />
           </div>
           <div className="text-center">
             <h2 className="text-white font-display text-2xl mb-2">Episode Saved!</h2>
-            <p className="text-nova-muted font-mono text-sm">Your recording is live in the Episodes page.</p>
+            <p className="text-nova-muted font-mono text-sm">Live in Episodes. Go to Studio to generate social copy.</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-wrap justify-center">
             <a href="/episodes" className="nova-btn-primary flex items-center gap-2 px-6 py-3">
               <Video size={16} /> View Episodes
             </a>
