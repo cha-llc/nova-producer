@@ -22,10 +22,27 @@ export default function Settings() {
   const [canvaConnecting, setCanvaConnecting] = useState(false)
   const [canvaMsg, setCanvaMsg]               = useState('')
 
+  // Detect return from Canva OAuth (server-side redirect flow)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('canva')
+    const msg    = params.get('msg')
+    if (status === 'connected') {
+      setCanvaMsg('✅ Canva connected! fal.ai + Canva composite thumbnails are now fully automated.')
+      setTab('canva')
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (status === 'error') {
+      setCanvaMsg('❌ ' + (msg ?? 'Canva connection failed. Try again.'))
+      setTab('canva')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
+
   const connectCanva = async () => {
     setCanvaConnecting(true); setCanvaMsg('')
     try {
-      const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/canva-oauth?action=auth_url`)
+      // Uses hardcoded URL — no env var dependency
+      const r = await fetch('https://vzzzqsmqqaoilkmskadl.supabase.co/functions/v1/canva-oauth?action=auth_url')
       const d = await r.json()
       if (d.auth_url) window.location.href = d.auth_url
       else setCanvaMsg('Error: ' + (d.error ?? 'Could not generate auth URL'))
