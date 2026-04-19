@@ -19,6 +19,11 @@ interface Script {
   part_title: string
   script_text: string
   show_id: string
+  series_topic?: string
+  series_part?: number
+  post_date?: string
+  status?: string
+  caption?: string
 }
 
 type Stage = 'setup' | 'recording' | 'review' | 'uploading' | 'done'
@@ -109,11 +114,10 @@ export default function Record() {
   useEffect(() => {
     if (!showId) return
     supabase.from('show_scripts')
-      .select('id,part_title,script_text,show_id')
+      .select('id,part_title,script_text,show_id,series_topic,series_part,post_date,status,caption')
       .eq('show_id', showId)
-      .in('status', ['draft', 'ready'])
-      .order('created_at', { ascending: false })
-      .limit(30)
+      .order('post_date', { ascending: true })
+      .order('series_part', { ascending: true })
       .then(({ data }) => {
         setScripts(data ?? [])
         setScriptId('')
@@ -588,7 +592,11 @@ export default function Record() {
                 </label>
                 <select value={scriptId} onChange={e => setScriptId(e.target.value)} className="nova-input text-sm w-full">
                   <option value="">— No script —</option>
-                  {scripts.map(s => <option key={s.id} value={s.id}>{s.part_title}</option>)}
+                  {scripts.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.status && s.status !== 'draft' ? `[${s.status}] ` : ''}{s.part_title}
+                    </option>
+                  ))}
                 </select>
                 {scriptId && (
                   <button onClick={() => setTeleprompter(v => !v)}
