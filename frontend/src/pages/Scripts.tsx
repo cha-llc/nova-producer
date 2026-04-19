@@ -66,7 +66,7 @@ export default function Scripts() {
       supabase.from('show_scripts')
         .select('id,show_id,series_topic,series_part,series_week_start,part_title,script_text,caption,status,post_date,post_time_utc')
         .order('post_date', { ascending: true }).order('series_part', { ascending: true }),
-      supabase.from('show_configs').select('id,show_name,display_name,color').order('display_name'),
+      supabase.from('show_configs').select('id,show_name,display_name,color,avatar_id,heygen_voice_id,voice_id,background_url').order('display_name'),
     ])
     const scripts = sc ?? []
     setScripts(scripts as Script[])
@@ -136,16 +136,40 @@ export default function Scripts() {
       setProduceMsg(p => ({ ...p, [script.id]: 'Show config not found' }))
       return
     }
-    if (script.status === 'processing' || script.status === 'ready') {
-      setProduceMsg(p => ({ ...p, [script.id]: 'Already queued or producing' }))
+    if (script.status === 'processing') {
+      setProduceMsg(p => ({ ...p, [script.id]: 'Already producing' }))
       return
     }
     setProducing(script.id)
     setProduceMsg(p => ({ ...p, [script.id]: '' }))
     try {
-      const { error } = await supabase.from('show_scripts').update({ status: 'ready' }).eq('id', script.id)
-      if (error) throw error
-      setProduceMsg(p => ({ ...p, [script.id]: 'Queued for NOVA production' }))
+      // Directly call ai-show-producer — no trigger, no auto-fire
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/ai-show-producer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script_id:       script.id,
+          show_name:       show.show_name,
+          avatar_id:       show.avatar_id ?? '',
+          heygen_voice_id: show.heygen_voice_id ?? '',
+          voice_id:        show.voice_id ?? '',
+          show_color:      show.color ?? '#1A1A2E',
+          background_url:  show.background_url ?? '',
+        }),
+      })
+      const d = await r.json()
+      if (d.success) {
+        setProduceMsg(p => ({ ...p, [script.id]: 'Submitted to HeyGen ✓' }))
+      } else if (d.queued) {
+        setProduceMsg(p => ({ ...p, [script.id]: 'Queued — avatar busy, will auto-produce' }))
+      } else if (d.skipped) {
+        setProduceMsg(p => ({ ...p, [script.id]: 'Already rendering ✓' }))
+      } else if (d.billing_blocked) {
+        setProduceMsg(p => ({ ...p, [script.id]: 'HeyGen credits depleted — top up to produce' }))
+      } else {
+        throw new Error(d.error || 'Production failed')
+      }
       load()
     } catch (e) {
       setProduceMsg(p => ({ ...p, [script.id]: `Error: ${String(e)}` }))
@@ -298,7 +322,7 @@ export default function Scripts() {
             const edit = edits[script.id] ?? script
             const isDirty = Boolean(edits[script.id])
             const hasScript  = script.script_text && script.script_text.trim().length >= 20
-            const canProduce = ['draft','failed'].includes(script.status) && Boolean(sh) && Boolean(hasScript)
+            const canProduce = ['draft','failed','ready'].includes(script.status) && Boolean(sh) && Boolean(hasScript)
             const isProducing = producing === script.id
             const canDelete   = ['draft','failed','scripting'].includes(script.status)
             const isScripting = script.status === 'scripting'
