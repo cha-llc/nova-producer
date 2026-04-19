@@ -80,7 +80,7 @@ export default function Record() {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef   = useRef<Blob[]>([])
   const blobRef     = useRef<Blob | null>(null)
-  const timerRef    = useRef<NodeJS.Timeout | null>(null)
+  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null)
   const trimBarRef  = useRef<HTMLDivElement>(null)
   const dragging    = useRef<'start' | 'end' | null>(null)
 
