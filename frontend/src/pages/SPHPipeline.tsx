@@ -79,14 +79,21 @@ export default function SPHPipeline() {
 
   async function generate(weekNum: number) {
     setActing(weekNum)
-    setMsg(`⏳ Generating scripts for Week ${weekNum}…`)
+    setMsg(`⏳ Generating 7 scripts for Week ${weekNum} — this takes ~15 seconds…`)
     const r = await fetch(PIPELINE_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'generate', week_number: weekNum }),
     })
     const d = await r.json()
     setActing(null)
-    setMsg(d.success ? `✅ Week ${weekNum} scripted — review then Approve to produce` : `❌ ${d.error}`)
+    setMsg(d.success ? `✅ Week ${weekNum} scripted — review then Approve to produce` : (() => {
+      const raw = d.error ?? 'Unknown error'
+      // Extract clean message from Anthropic JSON errors
+      try {
+        const inner = JSON.parse(raw.replace(/^Script generation failed: Claude \d+: /, ''))
+        return `❌ ${inner?.error?.message ?? raw}`
+      } catch { return `❌ ${raw.slice(0, 120)}` }
+    })())
     if (d.success) load()
   }
 
