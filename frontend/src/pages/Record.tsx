@@ -329,8 +329,20 @@ export default function Record() {
       drawThumbnail()
 
       recordStream = canvas.captureStream(30)
-      if (streamRef.current) {
-        streamRef.current.getAudioTracks().forEach(t => recordStream.addTrack(t))
+
+      // Get a FRESH mic stream here — setStage('recording') earlier in this function
+      // triggers the useEffect cleanup which stops streamRef.current tracks before
+      // the canvas recording setup runs. Acquiring audio independently avoids that race.
+      if (micOn) {
+        try {
+          const freshMic = await navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: micId ? { deviceId: { exact: micId }, echoCancellation: true, noiseSuppression: true } : { echoCancellation: true, noiseSuppression: true },
+          })
+          freshMic.getAudioTracks().forEach(t => recordStream.addTrack(t))
+        } catch (e) {
+          setError(`Mic error: ${String(e)}. Check browser mic permissions.`)
+        }
       }
     } else {
       if (!streamRef.current) {
