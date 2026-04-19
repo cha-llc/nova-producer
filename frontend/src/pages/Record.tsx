@@ -47,6 +47,7 @@ export default function Record() {
   const [thumbnailMode, setThumbnailMode] = useState(false)
   const [thumbnailUrl, setThumbnailUrl]   = useState('')
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [thumbLoading, setThumbLoading]   = useState(false)
 
   const [shows, setShows]           = useState<ShowConfig[]>([])
   const [scripts, setScripts]       = useState<Script[]>([])
@@ -118,6 +119,27 @@ export default function Record() {
         setScriptId('')
       })
   }, [showId])
+
+
+  // Auto-load thumbnail when thumbnail mode is toggled on
+  useEffect(() => {
+    if (!thumbnailMode || !showId) return
+    // Don't overwrite a manually uploaded file
+    if (thumbnailFile) return
+    setThumbLoading(true)
+    const SB = import.meta.env.VITE_SUPABASE_URL as string
+    fetch(`${SB}/functions/v1/record-thumbnail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ show_id: showId, script_id: scriptId || null }),
+    })
+      .then(r => r.json())
+      .then((d: { url?: string | null; source?: string }) => {
+        if (d.url) setThumbnailUrl(d.url)
+      })
+      .catch(() => {})
+      .finally(() => setThumbLoading(false))
+  }, [thumbnailMode, showId, scriptId])  // eslint-disable-line
 
   const startPreview = useCallback(async () => {
     if (streamRef.current) {
@@ -441,7 +463,7 @@ export default function Record() {
                 </div>
               </div>
               <button
-                onClick={() => setThumbnailMode(v => !v)}
+                onClick={() => { setThumbnailMode(v => !v); if (thumbnailMode) { setThumbnailUrl(''); setThumbnailFile(null) } }}
                 className={`relative w-12 h-6 rounded-full transition-all ${thumbnailMode ? 'bg-nova-gold' : 'bg-nova-border'}`}>
                 <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${thumbnailMode ? 'left-7' : 'left-1'}`} />
               </button>
@@ -470,12 +492,17 @@ export default function Record() {
                       <X size={14} className="text-white" />
                     </button>
                   </>
+                ) : thumbLoading ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 size={32} className="text-nova-gold animate-spin" />
+                    <p className="text-nova-gold font-mono text-sm">Loading show thumbnail...</p>
+                  </div>
                 ) : (
                   <>
                     <div className="w-16 h-16 rounded-full bg-nova-gold/10 border border-nova-gold/30 flex items-center justify-center">
                       <ImageIcon size={28} className="text-nova-gold/60" />
                     </div>
-                    <p className="text-nova-muted font-mono text-sm">Upload a thumbnail image</p>
+                    <p className="text-nova-muted font-mono text-sm">No thumbnail found — upload one</p>
                     <button
                       onClick={() => thumbInputRef.current?.click()}
                       className="flex items-center gap-2 px-4 py-2 rounded-xl border border-nova-gold/40 text-nova-gold text-sm hover:bg-nova-gold/10 transition-all">
