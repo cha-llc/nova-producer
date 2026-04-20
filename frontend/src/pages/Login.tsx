@@ -20,14 +20,13 @@ export default function Login() {
     setError('')
     setSuccess('')
 
-    // MAINTENANCE: Disable signup entirely
-    if (mode === 'signup') {
-      setError('🔧 Guest signup is temporarily under maintenance. We\'re upgrading our authentication system. Please try again in a few minutes, or contact support.')
+    if (!email || !password) {
+      setError('Email and password required')
       return
     }
 
-    if (!email || !password) {
-      setError('Email and password required')
+    if (mode === 'signup' && !guestName) {
+      setError('Guest name required')
       return
     }
 
@@ -39,10 +38,11 @@ export default function Login() {
     setLoading(true)
 
     try {
-      const endpoint = 'nova-guest-login'
+      const endpoint = mode === 'signup' ? 'nova-guest-signup' : 'nova-guest-login'
       const body = {
         email,
         password,
+        ...(mode === 'signup' && { guest_name: guestName }),
       }
 
       const res = await fetch(`${SB_URL}/functions/v1/${endpoint}`, {
@@ -56,7 +56,7 @@ export default function Login() {
       if (!res.ok) {
         const errorMsg = typeof data.error === 'string' 
           ? data.error 
-          : (data.error?.message || 'Login failed')
+          : (data.error?.message || `${mode === 'login' ? 'Login' : 'Signup'} failed`)
         setError(errorMsg)
         return
       }
@@ -66,7 +66,7 @@ export default function Login() {
       localStorage.setItem('nova_guest_id', data.guest_id)
       localStorage.setItem('nova_guest_name', data.guest_name || email)
 
-      setSuccess('Login successful! Redirecting...')
+      setSuccess(`${mode === 'login' ? 'Login' : 'Account created'}! Redirecting...`)
 
       // Redirect to dashboard
       setTimeout(() => {
@@ -120,10 +120,8 @@ export default function Login() {
                   ? 'bg-nova-gold text-nova-navy'
                   : 'bg-nova-border/20 text-nova-muted hover:bg-nova-border/30'
               }`}
-              disabled={mode === 'signup'}
-              title="Signup temporarily disabled for maintenance"
             >
-              Sign Up {mode === 'signup' && '🔧'}
+              Sign Up
             </button>
           </div>
 
@@ -143,56 +141,8 @@ export default function Login() {
           )}
 
           {/* Form */}
-          {mode === 'login' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-nova-muted mb-2">EMAIL</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3.5 w-5 h-5 text-nova-border/50" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
-                    className="w-full pl-10 pr-4 py-3 bg-nova-border/20 border border-nova-border/40 rounded-lg text-white placeholder-nova-border/60 focus:outline-none focus:border-nova-gold transition-colors"
-                    disabled={loading}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-nova-muted mb-2">PASSWORD</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3.5 w-5 h-5 text-nova-border/50" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-10 pr-4 py-3 bg-nova-border/20 border border-nova-border/40 rounded-lg text-white placeholder-nova-border/60 focus:outline-none focus:border-nova-gold transition-colors"
-                    disabled={loading}
-                  />
-                </div>
-              </div>
-
-              <button
-                onClick={handleAuth}
-                disabled={loading}
-                className="w-full mt-6 py-3 px-4 bg-nova-gold text-nova-navy font-bold rounded-lg hover:bg-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-              >
-                {loading ? 'Logging in...' : 'Login'}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {mode === 'signup' && (
-            <div className="space-y-4 opacity-60 pointer-events-none">
-              <div className="p-4 bg-nova-gold/10 border border-nova-gold/30 rounded-lg">
-                <p className="text-nova-gold text-sm font-medium">🔧 Signup is temporarily disabled</p>
-                <p className="text-nova-muted text-xs mt-2">We're upgrading our authentication system to improve security. Please check back soon!</p>
-              </div>
-
+          <div className="space-y-4">
+            {mode === 'signup' && (
               <div>
                 <label className="block text-xs font-semibold text-nova-muted mb-2">DISPLAY NAME</label>
                 <input
@@ -200,50 +150,54 @@ export default function Login() {
                   value={guestName}
                   onChange={(e) => setGuestName(e.target.value)}
                   placeholder="Your name"
-                  className="w-full px-4 py-3 bg-nova-border/20 border border-nova-border/40 rounded-lg text-white placeholder-nova-border/60"
-                  disabled={true}
+                  className="w-full px-4 py-3 bg-nova-border/20 border border-nova-border/40 rounded-lg text-white placeholder-nova-border/60 focus:outline-none focus:border-nova-gold transition-colors"
+                  disabled={loading}
                 />
               </div>
+            )}
 
-              <div>
-                <label className="block text-xs font-semibold text-nova-muted mb-2">EMAIL</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3.5 w-5 h-5 text-nova-border/50" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
-                    className="w-full pl-10 pr-4 py-3 bg-nova-border/20 border border-nova-border/40 rounded-lg text-white placeholder-nova-border/60"
-                    disabled={true}
-                  />
-                </div>
+            <div>
+              <label className="block text-xs font-semibold text-nova-muted mb-2">EMAIL</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3.5 w-5 h-5 text-nova-border/50" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  className="w-full pl-10 pr-4 py-3 bg-nova-border/20 border border-nova-border/40 rounded-lg text-white placeholder-nova-border/60 focus:outline-none focus:border-nova-gold transition-colors"
+                  disabled={loading}
+                />
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-nova-muted mb-2">PASSWORD</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3.5 w-5 h-5 text-nova-border/50" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-10 pr-4 py-3 bg-nova-border/20 border border-nova-border/40 rounded-lg text-white placeholder-nova-border/60"
-                    disabled={true}
-                  />
-                </div>
-                <p className="text-nova-border/60 text-xs mt-2">Min. 8 characters</p>
-              </div>
-
-              <button
-                disabled={true}
-                className="w-full mt-6 py-3 px-4 bg-nova-gold/50 text-nova-navy font-bold rounded-lg cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                Create Account →
-              </button>
             </div>
-          )}
+
+            <div>
+              <label className="block text-xs font-semibold text-nova-muted mb-2">PASSWORD</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3.5 w-5 h-5 text-nova-border/50" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-4 py-3 bg-nova-border/20 border border-nova-border/40 rounded-lg text-white placeholder-nova-border/60 focus:outline-none focus:border-nova-gold transition-colors"
+                  disabled={loading}
+                />
+              </div>
+              {mode === 'signup' && (
+                <p className="text-nova-border/60 text-xs mt-2">Min. 8 characters</p>
+              )}
+            </div>
+
+            <button
+              onClick={handleAuth}
+              disabled={loading}
+              className="w-full mt-6 py-3 px-4 bg-nova-gold text-nova-navy font-bold rounded-lg hover:bg-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {loading ? (mode === 'login' ? 'Logging in...' : 'Creating account...') : (mode === 'login' ? 'Login' : 'Create Account')}
+              {!loading && <ArrowRight className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
         {/* Footer */}
