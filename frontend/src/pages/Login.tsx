@@ -234,3 +234,6 @@ export default function Login() {
     </div>
   )
 }
+
+// DEPLOYMENT NOTICE: Signup is disabled - database schema requires auth.users FK
+// Fix: nova-guest-signup v7 pending deployment (uses admin API to create auth users)
