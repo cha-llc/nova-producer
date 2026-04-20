@@ -58,7 +58,6 @@ export default function Login() {
         return
       }
 
-      // Store token in localStorage
       localStorage.setItem('nova_guest_token', data.auth_token)
       localStorage.setItem('nova_guest_id', data.guest_id)
       localStorage.setItem('nova_guest_name', data.guest_name || email)
@@ -66,7 +65,6 @@ export default function Login() {
 
       setSuccess(`${mode === 'login' ? 'Login' : 'Account'} successful! Redirecting...`)
 
-      // Redirect to dashboard
       setTimeout(() => {
         navigate('/')
       }, 1500)
@@ -78,21 +76,21 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-nova-navy flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#1A1A2E] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-lg bg-nova-gold flex items-center justify-center">
-              <span className="font-display text-nova-navy text-2xl leading-none">N</span>
+            <div className="w-12 h-12 rounded-lg bg-[#C9A84C] flex items-center justify-center">
+              <span className="font-display text-[#1A1A2E] text-2xl leading-none">N</span>
             </div>
             <span className="font-display text-white text-3xl tracking-wider">NOVA</span>
           </div>
-          <p className="text-nova-muted text-sm font-mono">Guest Access Portal</p>
+          <p className="text-[#6B6B8A] text-sm font-mono">Guest Access Portal</p>
         </div>
 
         {/* Auth Card */}
-        <div className="bg-nova-navydark border border-nova-border/30 rounded-xl p-8">
+        <div className="bg-[#0D0D1A] border border-[#2A2A40]/30 rounded-xl p-8">
           {/* Mode Tabs */}
           <div className="flex gap-2 mb-6">
             <button
@@ -103,8 +101,8 @@ export default function Login() {
               }}
               className={`flex-1 py-2 rounded-lg font-body text-sm transition-all ${
                 mode === 'login'
-                  ? 'bg-nova-gold text-nova-navy font-medium'
-                  : 'bg-nova-border/30 text-nova-muted hover:bg-nova-border/50'
+                  ? 'bg-[#C9A84C] text-[#1A1A2E] font-medium'
+                  : 'bg-[#2A2A40]/30 text-[#6B6B8A] hover:bg-[#2A2A40]/50'
               }`}
             >
               Login
@@ -117,8 +115,8 @@ export default function Login() {
               }}
               className={`flex-1 py-2 rounded-lg font-body text-sm transition-all ${
                 mode === 'signup'
-                  ? 'bg-nova-gold text-nova-navy font-medium'
-                  : 'bg-nova-border/30 text-nova-muted hover:bg-nova-border/50'
+                  ? 'bg-[#C9A84C] text-[#1A1A2E] font-medium'
+                  : 'bg-[#2A2A40]/30 text-[#6B6B8A] hover:bg-[#2A2A40]/50'
               }`}
             >
               Sign Up
@@ -126,7 +124,7 @@ export default function Login() {
           </div>
 
           {/* Subtitle */}
-          <p className="text-nova-muted text-xs mb-6 text-center">
+          <p className="text-[#6B6B8A] text-xs mb-6 text-center">
             {mode === 'login'
               ? 'Enter your email and password to access NOVA'
               : 'Create your guest account to get started'}
@@ -135,47 +133,47 @@ export default function Login() {
           {/* Guest Name (Signup only) */}
           {mode === 'signup' && (
             <div className="mb-4">
-              <label className="block text-nova-muted text-xs font-mono mb-2">DISPLAY NAME</label>
+              <label className="block text-[#6B6B8A] text-xs font-mono mb-2">DISPLAY NAME</label>
               <input
                 type="text"
                 value={guestName}
                 onChange={e => setGuestName(e.target.value)}
                 placeholder="Your name or brand"
-                className="w-full bg-nova-border/20 border border-nova-border/30 rounded-lg px-4 py-3 text-white placeholder-nova-muted/50 font-body text-sm focus:outline-none focus:border-nova-gold/50 focus:bg-nova-border/30"
+                className="w-full bg-[#2A2A40]/20 border border-[#2A2A40]/30 rounded-lg px-4 py-3 text-white placeholder-[#6B6B8A]/50 font-body text-sm focus:outline-none focus:border-[#C9A84C]/50 focus:bg-[#2A2A40]/30"
               />
             </div>
           )}
 
           {/* Email */}
           <div className="mb-4">
-            <label className="block text-nova-muted text-xs font-mono mb-2">EMAIL</label>
+            <label className="block text-[#6B6B8A] text-xs font-mono mb-2">EMAIL</label>
             <div className="relative">
-              <Mail size={16} className="absolute left-3 top-3.5 text-nova-muted/50" />
+              <Mail size={16} className="absolute left-3 top-3.5 text-[#6B6B8A]/50" />
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value.toLowerCase())}
                 placeholder="you@example.com"
-                className="w-full pl-10 pr-4 py-3 bg-nova-border/20 border border-nova-border/30 rounded-lg text-white placeholder-nova-muted/50 font-body text-sm focus:outline-none focus:border-nova-gold/50 focus:bg-nova-border/30"
+                className="w-full pl-10 pr-4 py-3 bg-[#2A2A40]/20 border border-[#2A2A40]/30 rounded-lg text-white placeholder-[#6B6B8A]/50 font-body text-sm focus:outline-none focus:border-[#C9A84C]/50 focus:bg-[#2A2A40]/30"
               />
             </div>
           </div>
 
           {/* Password */}
           <div className="mb-6">
-            <label className="block text-nova-muted text-xs font-mono mb-2">PASSWORD</label>
+            <label className="block text-[#6B6B8A] text-xs font-mono mb-2">PASSWORD</label>
             <div className="relative">
-              <Lock size={16} className="absolute left-3 top-3.5 text-nova-muted/50" />
+              <Lock size={16} className="absolute left-3 top-3.5 text-[#6B6B8A]/50" />
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-3 bg-nova-border/20 border border-nova-border/30 rounded-lg text-white placeholder-nova-muted/50 font-body text-sm focus:outline-none focus:border-nova-gold/50 focus:bg-nova-border/30"
+                className="w-full pl-10 pr-4 py-3 bg-[#2A2A40]/20 border border-[#2A2A40]/30 rounded-lg text-white placeholder-[#6B6B8A]/50 font-body text-sm focus:outline-none focus:border-[#C9A84C]/50 focus:bg-[#2A2A40]/30"
               />
             </div>
             {mode === 'signup' && (
-              <p className="text-nova-muted text-xs mt-1">Min. 8 characters</p>
+              <p className="text-[#6B6B8A] text-xs mt-1">Min. 8 characters</p>
             )}
           </div>
 
@@ -199,11 +197,11 @@ export default function Login() {
           <button
             onClick={handleAuth}
             disabled={loading}
-            className="w-full py-3 bg-nova-gold hover:bg-nova-gold/90 disabled:opacity-50 text-nova-navy font-body font-medium rounded-lg transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 bg-[#C9A84C] hover:bg-[#B8975F] disabled:opacity-50 text-[#1A1A2E] font-body font-medium rounded-lg transition-all flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
-                <div className="w-4 h-4 border-2 border-nova-navy border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-[#1A1A2E] border-t-transparent rounded-full animate-spin" />
                 {mode === 'login' ? 'Logging in...' : 'Creating account...'}
               </>
             ) : (
@@ -215,8 +213,8 @@ export default function Login() {
           </button>
 
           {/* Info Box */}
-          <div className="mt-6 p-3 rounded-lg bg-nova-gold/5 border border-nova-gold/20">
-            <p className="text-nova-muted text-xs leading-relaxed">
+          <div className="mt-6 p-3 rounded-lg bg-[#C9A84C]/5 border border-[#C9A84C]/20">
+            <p className="text-[#6B6B8A] text-xs leading-relaxed">
               📢 <strong>Guest Account Benefits:</strong> Full access to all NOVA tools. Create your own shows,
               episodes, scripts, and schedule posts. Your content stays private.
             </p>
@@ -224,7 +222,7 @@ export default function Login() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-nova-muted text-xs mt-6 font-mono">
+        <p className="text-center text-[#6B6B8A] text-xs mt-6 font-mono">
           Powered by NOVA | Secure Guest Access
         </p>
       </div>

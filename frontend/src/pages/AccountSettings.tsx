@@ -84,13 +84,11 @@ export default function AccountSettings() {
         return
       }
 
-      // Clear localStorage
       localStorage.removeItem('nova_guest_token')
       localStorage.removeItem('nova_guest_id')
       localStorage.removeItem('nova_guest_name')
       localStorage.removeItem('nova_guest_session_start')
 
-      // Redirect to login
       window.location.href = '/login'
     } catch (e) {
       setError(String(e))
@@ -99,7 +97,7 @@ export default function AccountSettings() {
     }
   }
 
-  async function handleUpgradeToProclick() {
+  async function handleUpgradeToPro() {
     const token = localStorage.getItem('nova_guest_token')
     if (!token) return
 
@@ -121,7 +119,6 @@ export default function AccountSettings() {
         return
       }
 
-      // Redirect to Stripe checkout
       window.location.href = data.checkout_url
     } catch (e) {
       setError(String(e))
@@ -131,7 +128,7 @@ export default function AccountSettings() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin w-8 h-8 border-2 border-nova-gold border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-2 border-[#C9A84C] border-t-transparent rounded-full" />
       </div>
     )
   }
@@ -154,15 +151,15 @@ export default function AccountSettings() {
       <h1 className="text-3xl font-display text-white mb-8">Account Settings</h1>
 
       {/* Account Info */}
-      <div className="bg-nova-navydark border border-nova-border/30 rounded-xl p-6 mb-6">
+      <div className="bg-[#0D0D1A] border border-[#2A2A40]/30 rounded-xl p-6 mb-6">
         <h2 className="text-lg font-body font-medium text-white mb-4">Account Information</h2>
         <div className="space-y-3">
           <div>
-            <p className="text-nova-muted text-xs font-mono">NAME</p>
+            <p className="text-[#6B6B8A] text-xs font-mono">NAME</p>
             <p className="text-white">{status.guest_name}</p>
           </div>
           <div>
-            <p className="text-nova-muted text-xs font-mono">EMAIL</p>
+            <p className="text-[#6B6B8A] text-xs font-mono">EMAIL</p>
             <p className="text-white">{status.email}</p>
           </div>
         </div>
@@ -170,18 +167,18 @@ export default function AccountSettings() {
 
       {/* Trial / Subscription Status */}
       {status.subscription_status === 'trial' && !isTrialExpired && (
-        <div className="bg-nova-navydark border border-nova-gold/30 rounded-xl p-6 mb-6">
+        <div className="bg-[#0D0D1A] border border-[#C9A84C]/30 rounded-xl p-6 mb-6">
           <div className="flex items-start gap-4">
-            <Clock size={24} className="text-nova-gold flex-shrink-0 mt-1" />
+            <Clock size={24} className="text-[#C9A84C] flex-shrink-0 mt-1" />
             <div className="flex-1">
               <h3 className="text-lg font-body font-medium text-white mb-2">Free Trial Active</h3>
-              <p className="text-nova-muted text-sm mb-4">
+              <p className="text-[#6B6B8A] text-sm mb-4">
                 {status.trial_info.days_remaining} days remaining. Trial ends on{' '}
                 {new Date(status.trial_info.ends_at).toLocaleDateString()}
               </p>
               <button
-                onClick={handleUpgradeToProclick}
-                className="px-4 py-2 bg-nova-gold hover:bg-nova-gold/90 text-nova-navy font-body font-medium rounded-lg transition-all"
+                onClick={handleUpgradeToPro}
+                className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B8975F] text-[#1A1A2E] font-body font-medium rounded-lg transition-all"
               >
                 Upgrade to Pro ($20/month)
               </button>
@@ -191,17 +188,17 @@ export default function AccountSettings() {
       )}
 
       {isTrialExpired && !isProActive && (
-        <div className="bg-nova-navydark border border-red-500/30 rounded-xl p-6 mb-6">
+        <div className="bg-[#0D0D1A] border border-red-500/30 rounded-xl p-6 mb-6">
           <div className="flex items-start gap-4">
             <AlertCircle size={24} className="text-red-400 flex-shrink-0 mt-1" />
             <div className="flex-1">
               <h3 className="text-lg font-body font-medium text-white mb-2">Trial Expired</h3>
-              <p className="text-nova-muted text-sm mb-4">
+              <p className="text-[#6B6B8A] text-sm mb-4">
                 Your 7-day free trial has ended. Subscribe to Pro to continue using NOVA.
               </p>
               <button
-                onClick={handleUpgradeToProclick}
-                className="px-4 py-2 bg-nova-gold hover:bg-nova-gold/90 text-nova-navy font-body font-medium rounded-lg transition-all"
+                onClick={handleUpgradeToPro}
+                className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B8975F] text-[#1A1A2E] font-body font-medium rounded-lg transition-all"
               >
                 Upgrade to Pro ($20/month)
               </button>
@@ -211,12 +208,12 @@ export default function AccountSettings() {
       )}
 
       {isProActive && (
-        <div className="bg-nova-navydark border border-teal-500/30 rounded-xl p-6 mb-6">
+        <div className="bg-[#0D0D1A] border border-[#2A9D8F]/30 rounded-xl p-6 mb-6">
           <div className="flex items-start gap-4">
-            <CheckCircle size={24} className="text-teal-400 flex-shrink-0 mt-1" />
+            <CheckCircle size={24} className="text-[#2A9D8F] flex-shrink-0 mt-1" />
             <div className="flex-1">
               <h3 className="text-lg font-body font-medium text-white mb-2">Pro Active</h3>
-              <p className="text-nova-muted text-sm">
+              <p className="text-[#6B6B8A] text-sm">
                 Subscription renews on {new Date(status.subscription_renews_at!).toLocaleDateString()}
               </p>
             </div>
@@ -225,13 +222,13 @@ export default function AccountSettings() {
       )}
 
       {error && (
-        <div className="bg-nova-navydark border border-red-500/30 rounded-xl p-4 mb-6">
+        <div className="bg-[#0D0D1A] border border-red-500/30 rounded-xl p-4 mb-6">
           <p className="text-red-400 text-sm">{error}</p>
         </div>
       )}
 
       {/* Logout Button */}
-      <div className="bg-nova-navydark border border-nova-border/30 rounded-xl p-6">
+      <div className="bg-[#0D0D1A] border border-[#2A2A40]/30 rounded-xl p-6">
         <h2 className="text-lg font-body font-medium text-white mb-4">Session</h2>
         <button
           onClick={handleLogout}
