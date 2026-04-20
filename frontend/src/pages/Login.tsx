@@ -62,6 +62,7 @@ export default function Login() {
       localStorage.setItem('nova_guest_token', data.auth_token)
       localStorage.setItem('nova_guest_id', data.guest_id)
       localStorage.setItem('nova_guest_name', data.guest_name || email)
+      localStorage.setItem('nova_guest_session_start', Date.now().toString())
 
       setSuccess(`${mode === 'login' ? 'Login' : 'Account'} successful! Redirecting...`)
 

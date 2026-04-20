@@ -5,6 +5,7 @@ import Dashboard      from './pages/Dashboard'
 import Scripts        from './pages/Scripts'
 import Episodes       from './pages/Episodes'
 import Scheduler      from './pages/Scheduler'
+import AccountSettings from './pages/AccountSettings'
 import Settings       from './pages/Settings'
 import SPHPipeline    from './pages/SPHPipeline'
 import Studio         from './pages/Studio'
@@ -27,6 +28,7 @@ export default function App() {
                 <Route path="/scripts"  element={<Scripts />} />
                 <Route path="/episodes" element={<Episodes />} />
                 <Route path="/scheduler" element={<Scheduler />} />
+                <Route path="/account"  element={<AccountSettings />} />
                 <Route path="/studio"   element={<Studio />} />
                 <Route path="/voice"    element={<Voice />} />
                 <Route path="/record"   element={<Record />} />

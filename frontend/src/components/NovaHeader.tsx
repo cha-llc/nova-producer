@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { Radio, FileText, Video, Settings, Sun, Brain, Mic, Camera, Send } from 'lucide-react'
 import ChaNav from './ChaNav'
+import GuestNav from './GuestNav'
 
 const nav = [
   { to: '/',         label: 'Dashboard', icon: Radio    },
@@ -15,6 +16,8 @@ const nav = [
 ]
 
 export default function NovaHeader() {
+  const isGuest = !!localStorage.getItem('nova_guest_token')
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-nova-border bg-nova-navydark/90 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
@@ -52,7 +55,7 @@ export default function NovaHeader() {
         </nav>
 
         <div className="flex items-center gap-3">
-          <ChaNav current="nova" />
+          {isGuest ? <GuestNav /> : <ChaNav current="nova" />}
           <div className="hidden sm:flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-nova-teal animate-pulse-slow" />
             <span className="text-xs font-mono text-nova-muted">LIVE</span>
