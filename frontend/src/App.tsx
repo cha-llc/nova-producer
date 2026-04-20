@@ -12,13 +12,17 @@ import Studio         from './pages/Studio'
 import Record         from './pages/Record'
 import Voice          from './pages/Voice'
 import CanvaCallback  from './pages/CanvaCallback'
+import Login          from './pages/Login'
 
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Public route — no auth */}
       <Routes>
+        {/* Public routes — no auth required */}
+        <Route path="/login" element={<Login />} />
         <Route path="/canva-callback" element={<CanvaCallback />} />
+        
+        {/* Protected routes — auth required */}
         <Route path="*" element={
           <AuthGuard>
             <NovaHeader />
