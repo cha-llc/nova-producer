@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Radio, FileText, Video, Brain, Mic, Sparkles, TrendingUp,
-         CheckCircle, Loader2, AlertCircle, RefreshCw, ArrowRight, Palette } from 'lucide-react'
+         CheckCircle, Loader2, AlertCircle, RefreshCw, ArrowRight, Palette, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { NavLink } from 'react-router-dom'
 import type { NovaSocialContent } from '../types'
@@ -25,8 +25,11 @@ const SHOW_COLORS: Record<string, string> = {
 }
 
 export default function Dashboard() {
+  const isGuest = !!localStorage.getItem('nova_guest_token')
+  const guestName = localStorage.getItem('nova_guest_name') || 'Guest'
+
   const [stats, setStats]     = useState<Stats>(EMPTY)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!isGuest)
   const [recentEps, setRecentEps] = useState<Array<{
     id: string; show_name: string; episode_title: string; heygen_title: string
     status: string; storage_url: string; thumbnail_url: string; created_at: string
@@ -66,13 +69,14 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
+    if (isGuest) return
     load()
     // Realtime: refresh stats when episodes change
     const ch = supabase.channel('dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_episodes' }, () => load())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [load])
+  }, [load, isGuest])
 
   const topCards = [
     { label: 'Episodes Published', value: stats.complete_episodes,  color: '#2A9D8F', sub: `${stats.total_episodes} total` },
@@ -89,6 +93,58 @@ export default function Dashboard() {
     { to: '/settings', label: 'Canva Templates',  desc: 'Branded thumbnails',        color: '#A855F7', icon: Palette  },
   ]
 
+  // ── GUEST VIEW ─────────────────────────────────────────────────────────────
+  if (isGuest) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-2 h-2 rounded-full bg-nova-teal animate-pulse-slow" />
+              <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Guest Access Portal</span>
+            </div>
+            <h1 className="font-display text-4xl text-white tracking-wide">Welcome, {guestName}</h1>
+            <p className="text-sm font-mono text-nova-muted mt-1">
+              Your NOVA guest workspace — explore available features below
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: 'Episodes', sub: 'Your produced videos', color: '#2A9D8F' },
+            { label: 'Scripts', sub: 'Your content queue', color: '#C9A84C' },
+            { label: 'AI Content', sub: 'Studio outputs', color: '#9B5DE5' },
+            { label: 'Voice Clones', sub: 'ElevenLabs clones', color: '#2A9D8F' },
+          ].map(({ label, sub, color }) => (
+            <div key={label} className="nova-card flex flex-col gap-2 opacity-50">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                <span className="text-xs font-mono text-nova-muted">{label}</span>
+              </div>
+              <div className="flex items-end gap-2">
+                <Lock size={18} className="text-nova-muted" />
+              </div>
+              <p className="text-xs font-mono text-nova-muted">{sub}</p>
+            </div>
+          ))}
+        </div>
+        <div className="nova-card border border-nova-gold/30">
+          <div className="flex items-start gap-3">
+            <Sparkles size={16} className="text-nova-gold flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-body text-white mb-1">Guest Access Active</p>
+              <p className="text-xs font-mono text-nova-muted">
+                You have read access to NOVA. Full production features require a Pro subscription.
+                Your data is isolated — only you can see your content.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── OWNER VIEW ──────────────────────────────────────────────────────────────
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex items-center justify-between">
