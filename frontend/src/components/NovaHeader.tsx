@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Radio, FileText, Video, Settings, Sun, Brain, Mic, Camera, Send } from 'lucide-react'
+import { Radio, FileText, Video, Settings, Sun, Brain, Mic, Camera, Send, BookOpen } from 'lucide-react'
 import ChaNav from './ChaNav'
 import GuestNav from './GuestNav'
 
@@ -11,8 +11,9 @@ const nav = [
   { to: '/studio',   label: 'Studio',    icon: Brain    },
   { to: '/record',   label: 'Record',    icon: Camera   },
   { to: '/voice',    label: 'Voice',     icon: Mic      },
-  { to: '/sph',      label: 'SPH',       icon: Sun      },
-  { to: '/settings', label: 'Settings',  icon: Settings },
+  { to: '/sph',      label: 'SPH',         icon: Sun      },
+  { to: '/books',    label: 'Book Editor', icon: BookOpen },
+  { to: '/settings', label: 'Settings',    icon: Settings },
 ]
 
 export default function NovaHeader() {
