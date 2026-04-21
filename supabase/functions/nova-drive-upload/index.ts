@@ -1,6 +1,6 @@
-// nova-drive-upload v1
-// Uploads a file to Google Drive using a Google service account stored in Supabase secrets.
-// Falls back to OAuth token passed in Authorization header if service account not configured.
+// nova-drive-upload v2
+// Uploads a file to Google Drive via Anthropic API + Google Drive MCP server.
+// No service account needed — uses the MCP OAuth credentials already configured.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
@@ -15,33 +15,14 @@ const CORS = {
 const json = (d: unknown, s = 200) =>
   new Response(JSON.stringify(d), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-// Build a Google OAuth2 access token from service account credentials
-async function getServiceAccountToken(sa: { client_email: string; private_key: string }): Promise<string> {
-  const now   = Math.floor(Date.now() / 1000);
-  const claim = { iss: sa.client_email, scope: 'https://www.googleapis.com/auth/drive.file', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 };
-
-  // Build JWT header.payload
-  const header  = btoa(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const payload = btoa(JSON.stringify(claim)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const unsigned = `${header}.${payload}`;
-
-  // Sign with private key
-  const pemKey = sa.private_key.replace(/\\n/g, '\n');
-  const binaryKey = pemKey.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, '');
-  const keyBytes  = Uint8Array.from(atob(binaryKey), c => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey('pkcs8', keyBytes, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
-  const sigBytes  = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(unsigned));
-  const sig       = btoa(String.fromCharCode(...new Uint8Array(sigBytes))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-
-  const jwt = `${unsigned}.${sig}`;
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  });
-  const data = await res.json() as { access_token: string };
-  if (!data.access_token) throw new Error('Service account token exchange failed');
-  return data.access_token;
+async function getAnthropicKey(): Promise<string> {
+  try {
+    const { data } = await sb.rpc('vault_read_anthropic_key');
+    if (data && String(data).length > 30) return String(data).trim();
+  } catch { /* fall through */ }
+  const k = Deno.env.get('ANTHROPIC_API_KEY')?.trim();
+  if (k && k.length > 30) return k;
+  throw new Error('ANTHROPIC_API_KEY not configured');
 }
 
 Deno.serve(async (req) => {
@@ -54,61 +35,72 @@ Deno.serve(async (req) => {
   const { fileName, content, mimeType = 'text/html', parentId } = body;
   if (!fileName || !content) return json({ error: 'fileName and content required' }, 400);
 
-  // Get Google access token — try service account from Vault first, fall back to user OAuth token
-  let accessToken = '';
-  try {
-    const { data: saJson } = await sb.rpc('vault_read_google_sa_key').catch(() => ({ data: null }));
-    if (saJson && String(saJson).length > 100) {
-      const sa = JSON.parse(String(saJson));
-      accessToken = await getServiceAccountToken(sa);
-    }
-  } catch { /* no service account — fall through */ }
+  const anthropicKey = await getAnthropicKey().catch(e => { throw e; });
 
-  // Fall back: use the Authorization header token (user's Google OAuth session)
-  if (!accessToken) {
-    const authHeader = req.headers.get('Authorization') || '';
-    // This is the Supabase JWT — we need to look up the Google token from the session
-    // For now, return a clear error so we know which path to fix
-    return json({
-      error: 'Google service account not configured. Add GOOGLE_SA_KEY to Supabase Vault as vault_read_google_sa_key.',
-      hint:  'Alternatively, the Drive MCP can be used directly from the frontend.',
-      fallback: true,
-    }, 503);
+  // Base64-encode the content for Drive MCP upload
+  const b64 = btoa(unescape(encodeURIComponent(content)));
+
+  // Call Anthropic API with Google Drive MCP server attached
+  // Claude will invoke the create_file tool and return the result
+  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key':         anthropicKey,
+      'anthropic-version': '2023-06-01',
+      'content-type':      'application/json',
+    },
+    body: JSON.stringify({
+      model:      'claude-sonnet-4-5',
+      max_tokens: 1024,
+      mcp_servers: [
+        {
+          type: 'url',
+          url:  'https://drivemcp.googleapis.com/mcp/v1',
+          name: 'google-drive',
+        }
+      ],
+      messages: [{
+        role: 'user',
+        content: `Upload a file to Google Drive with these exact parameters and return only the JSON result of the tool call:
+- title: "${fileName}"
+- content: (base64 encoded, provided below)
+- mimeType: "${mimeType}"
+- disableConversionToGoogleType: true
+${parentId ? `- parentId: "${parentId}"` : ''}
+
+Base64 content:
+${b64}
+
+Use the create_file tool. After the tool responds, reply with ONLY a JSON object: {"id":"<file_id>","name":"<file_name>","webViewLink":"<link>"}`
+      }],
+    }),
+  });
+
+  if (!claudeRes.ok) {
+    const err = await claudeRes.json().catch(() => ({}));
+    return json({ error: 'Claude/MCP call failed', details: err }, claudeRes.status);
   }
 
-  // Upload file using multipart upload
-  const boundary = '----BookEditorBoundary';
-  const metadata = JSON.stringify({ name: fileName, ...(parentId ? { parents: [parentId] } : {}) });
-  const contentBytes = new TextEncoder().encode(content);
+  const claudeData = await claudeRes.json();
 
-  const multipart = [
-    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`,
-    `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`,
-  ];
+  // Extract the file result — try tool_result block first, then text block
+  const content_blocks = claudeData.content || [];
 
-  const part1 = new TextEncoder().encode(multipart[0]);
-  const part2 = new TextEncoder().encode(multipart[1]);
-  const part3 = new TextEncoder().encode(`\r\n--${boundary}--`);
-
-  const combined = new Uint8Array(part1.length + part2.length + contentBytes.length + part3.length);
-  combined.set(part1, 0);
-  combined.set(part2, part1.length);
-  combined.set(contentBytes, part1.length + part2.length);
-  combined.set(part3, part1.length + part2.length + contentBytes.length);
-
-  const uploadRes = await fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
-    {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type':  `multipart/related; boundary=${boundary}`,
-      },
-      body: combined,
+  // Look for JSON in text response
+  for (const block of content_blocks) {
+    if (block.type === 'text') {
+      try {
+        const match = block.text.match(/\{[^{}]*"id"[^{}]*\}/);
+        if (match) return json(JSON.parse(match[0]));
+      } catch { /* try next */ }
     }
-  );
+    // Tool result block
+    if (block.type === 'tool_result' || block.type === 'tool_use') {
+      const inner = block.content || block.input || {};
+      if (inner.id || inner.webViewLink) return json(inner);
+    }
+  }
 
-  const result = await uploadRes.json();
-  if (!uploadRes.ok) return json({ error: result?.error?.message || 'Drive upload failed', details: result }, uploadRes.status);
-  return json(result);
+  // Last resort: return whatever Claude said so frontend can handle it
+  return json({ error: 'Drive upload completed but could not parse file ID', raw: claudeData }, 207);
 });
