@@ -388,7 +388,7 @@ export default function BookEditor() {
 Analyse this writing sample and extract a voice profile. Return ONLY valid JSON:
 {"tone":"one phrase","pov":"first/third person limited/omniscient","sentences":"short and punchy/long and lyrical/varied","vocabulary":"plain/literary/conversational","fingerprint":"2-3 sentence description of most distinctive stylistic traits"}
 SAMPLE:\n${sample}`, 1000)
-      const p = JSON.parse(res)
+      const p = safeParseJson(res, { tone:'', pov:'', sentences:'', vocabulary:'', fingerprint:'' })
       const profile: VoiceProfile = {
         id: uid(), name: newVoiceName.trim(), genre,
         tone: p.tone||'', pov: p.pov||'', sentences: p.sentences||'',
@@ -511,7 +511,7 @@ Return ONLY valid JSON array:
 [{"chapter":1,"note":"specific concern","severity":"low|medium|high"}]
 If no concerns, return [].
 EXCERPTS:\n${sample}`, 3000)
-      const arr = JSON.parse(r)
+      const arr = safeParseJson(r, [])
       setSensitivityNotes(Array.isArray(arr) ? arr : [])
     } catch { setSensitivityNotes([]) }
     setSensitivityLoading(false)
@@ -620,7 +620,7 @@ Available chapters:\n${chList}
 
 Return ONLY valid JSON array:
 [{"part":1,"title":"Episode title","chapters":[1,2,3],"teaser":"1-sentence cliffhanger teaser for this episode"}]`, 1000)
-      const arr = JSON.parse(r)
+      const arr = safeParseJson(r, [])
       setSerialParts(Array.isArray(arr) ? arr : [])
     } catch { setSerialParts([]) }
     setSerialLoading(false)
@@ -688,7 +688,7 @@ Amazon KDP strategist. Find 3 comp titles for: "${metadata.title}" (${metadata.g
 Return ONLY valid JSON array:
 [{"title":"","author":"","category":"","why":"1 sentence","rank":"e.g. #1 in Historical Mystery"}]
 `, 1000)
-      const arr = JSON.parse(res)
+      const arr = safeParseJson(res, [])
       setCompTitles(Array.isArray(arr) ? arr : [])
     } catch { setCompTitles([]) }
     setCompLoading(false)
@@ -706,9 +706,9 @@ Return ONLY valid JSON array:
       const parseRes = await claude(`
 Parse this manuscript into chapters. Return ONLY valid JSON.
 {"title":"","chapters":[{"number":1,"title":"","text":""}]}
-Max 20 chapters. MANUSCRIPT:\n${rawText.slice(0, 40000)}`)
-      const parsed = JSON.parse(parseRes)
-      const raw    = parsed.chapters || []
+Max 20 chapters. MANUSCRIPT:\n${rawText.slice(0, 40000)}`, 8000)
+      const parsed = safeParseJson(parseRes, { title: '', chapters: [] })
+      const raw    = (parsed.chapters as {number:number;title:string;text:string}[]) || []
       if (!raw.length) throw new Error('No chapters found.')
 
       const gl = GENRE_OPTIONS.find(g => g.value === genre)?.label || 'Fiction'
@@ -754,7 +754,7 @@ KDP publishing metadata. Return ONLY valid JSON.
 {"title":"","subtitle":"","author":"${authorName}","genre":"${gl}","categories":["",""],"keywords":["","","","","","",""],"description":"150-200w Amazon description ending in a question","bisac":""}
 Book: ${parsed.title}, Genre: ${gl}, Excerpt: ${rewritten[0]?.rewritten_text?.slice(0,1000)||''}`, 2000)
       let meta: KDPMetadata
-      try { meta = JSON.parse(metaRes) }
+      try { meta = safeParseJson(metaRes, {}) }
       catch { meta = { title: parsed.title, subtitle: '', author: authorName, genre: gl, categories: [`Fiction > ${gl}`,'Literature & Fiction'], keywords: [gl,'novel',authorName,'fiction','CHA LLC'], description: '', bisac: 'FIC000000' } }
       setMetadata(meta)
 
@@ -764,7 +764,7 @@ Book: ${parsed.title}, Genre: ${gl}, Excerpt: ${rewritten[0]?.rewritten_text?.sl
         const cp = await claude(`
 fal.ai prompt + back cover for "${meta.title}" (${gl}). Return ONLY valid JSON:
 {"image_prompt":"cinematic book cover, dramatic lighting, no text, professional","tagline":"under 12 words","back_blurb":"80-100 words, present tense, ends with a question"}`, 600)
-        const cm   = JSON.parse(cp)
+        const cm   = safeParseJson(cp, {})
         const sess = await supabase.auth.getSession()
         const ir   = await fetch(`${SUPABASE_URL}/functions/v1/nova-image`, {
           method: 'POST',
