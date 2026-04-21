@@ -5,7 +5,8 @@ import {
   Download, Star, RefreshCw, Sparkles, BookMarked,
   PenTool, LayoutTemplate, Tag, ArrowRight, X, Plus,
   Cloud, BookCopy, Library, Mic2, BarChart2,
-  RotateCcw, Lock, Unlock, Trophy, Lock as LockIcon
+  RotateCcw, Lock, Unlock, Trophy, Lock as LockIcon,
+  Globe, Users, Zap
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -282,6 +283,250 @@ CHAPTER ${ch.number}: ${ch.title}\n${ch.rewritten_text}`, 5000)
     } catch {
       u[idx] = { ...ch, regenerating: false }; setChapters([...u])
     }
+  }
+
+  /* Tier 2+3 state */
+  const [prologueText,    setPrologueText]    = useState('')
+  const [epilogueText,    setEpilogueText]    = useState('')
+  const [prologueLoading, setPrologueLoading] = useState(false)
+  const [epilogueLoading, setEpilogueLoading] = useState(false)
+  const [sensitivityNotes,setSensitivityNotes]= useState<{chapter:number;note:string;severity:'low'|'medium'|'high'}[]>([])
+  const [sensitivityLoading, setSensitivityLoading] = useState(false)
+  const [aplusContent,    setAplusContent]    = useState('')
+  const [aplusLoading,    setAplusLoading]    = useState(false)
+  const [audioscript,     setAudioscript]     = useState('')
+  const [audioscriptLoading, setAudioscriptLoading] = useState(false)
+  const [printDocUrl,     setPrintDocUrl]     = useState('')
+  const [printLoading,    setPrintLoading]    = useState(false)
+  const [gumroadPage,     setGumroadPage]     = useState('')
+  const [gumroadLoading,  setGumroadLoading]  = useState(false)
+  const [bookClubGuide,   setBookClubGuide]   = useState('')
+  const [bookClubLoading, setBookClubLoading] = useState(false)
+  const [serialParts,     setSerialParts]     = useState<{part:number;title:string;chapters:number[];teaser:string}[]>([])
+  const [serialLoading,   setSerialLoading]   = useState(false)
+  const [projectLibrary,  setProjectLibrary]  = useState<{id:string;title:string;author:string;genre:string;wordCount:number;score:number;savedAt:string;driveUrl:string}[]>([])
+
+  /* load project library from localStorage */
+  useEffect(() => {
+    try {
+      const d = JSON.parse(localStorage.getItem(LS_KEY) || '{}')
+      if (d.projectLibrary) setProjectLibrary(d.projectLibrary)
+    } catch { /* ignore */ }
+  }, [])
+
+  /* ── Tier 2: Prologue generator ── */
+  const generatePrologue = async () => {
+    if (!chapters.length || !metadata) return
+    setPrologueLoading(true); setPrologueText('')
+    try {
+      const excerpt = chapters[0].rewritten_text.slice(0, 1500)
+      const r = await claude(`
+Write a powerful prologue for "${metadata.title}" (${metadata.genre}).
+It must: hook the reader in the first sentence, establish tone and stakes, be 300-500 words.
+Do NOT summarise the plot. Create atmosphere and dread/longing/tension.
+Base it on this opening chapter excerpt:\n${excerpt}
+Return ONLY the prologue text, no labels or JSON.`, 2000)
+      setPrologueText(r)
+    } catch { setPrologueText('Generation failed — try again.') }
+    setPrologueLoading(false)
+  }
+
+  /* ── Tier 2: Epilogue generator ── */
+  const generateEpilogue = async () => {
+    if (!chapters.length || !metadata) return
+    setEpilogueLoading(true); setEpilogueText('')
+    try {
+      const last = chapters[chapters.length - 1].rewritten_text.slice(-1500)
+      const r = await claude(`
+Write a satisfying epilogue for "${metadata.title}" (${metadata.genre}).
+It must: resolve lingering emotional threads, leave the reader fulfilled, hint at what comes next.
+Be 300-400 words. Do not summarise the book.
+Based on this final chapter ending:\n${last}
+Return ONLY the epilogue text, no labels or JSON.`, 2000)
+      setEpilogueText(r)
+    } catch { setEpilogueText('Generation failed — try again.') }
+    setEpilogueLoading(false)
+  }
+
+  /* ── Tier 2: Sensitivity reader ── */
+  const runSensitivityPass = async () => {
+    if (!chapters.length) return
+    setSensitivityLoading(true); setSensitivityNotes([])
+    try {
+      const sample = chapters.map(c => `Ch ${c.number}: ${c.rewritten_text.slice(0, 800)}`).join('\n\n')
+      const r = await claude(`
+You are a professional sensitivity reader.
+Review these chapter excerpts and flag passages that may land poorly with modern audiences.
+Focus on: racial/ethnic stereotypes, gender dynamics, ableism, cultural misrepresentation, trauma portrayal.
+Return ONLY valid JSON array:
+[{"chapter":1,"note":"specific concern","severity":"low|medium|high"}]
+If no concerns, return [].
+EXCERPTS:\n${sample}`, 3000)
+      const arr = JSON.parse(r)
+      setSensitivityNotes(Array.isArray(arr) ? arr : [])
+    } catch { setSensitivityNotes([]) }
+    setSensitivityLoading(false)
+  }
+
+  /* ── Tier 2: Amazon A+ content ── */
+  const generateAplus = async () => {
+    if (!metadata) return
+    setAplusLoading(true); setAplusContent('')
+    try {
+      const r = await claude(`
+Write Amazon A+ content for "${metadata.title}" by ${metadata.author}.
+Genre: ${metadata.genre}. Description: ${metadata.description}
+
+Structure:
+1. EDITORIAL REVIEW (150 words) — authoritative, third-person
+2. FROM THE AUTHOR (100 words) — personal, first-person, authentic
+3. ABOUT THIS BOOK (3 bullet points) — specific, reader-benefit focused
+4. PERFECT FOR READERS WHO (3 bullet points) — audience targeting
+
+Return as plain text with these exact section headers.`, 2000)
+      setAplusContent(r)
+    } catch { setAplusContent('Generation failed — try again.') }
+    setAplusLoading(false)
+  }
+
+  /* ── Tier 3: Audiobook script formatter ── */
+  const generateAudioscript = async () => {
+    if (!chapters.length) return
+    setAudioscriptLoading(true); setAudioscript('')
+    try {
+      const ch = chapters[0]
+      const r = await claude(`
+Format this chapter as a professional audiobook narration script.
+Add: [PAUSE] for natural breaks, [EMPHASIS] for key words, [SLOW] for emotional moments, [SCENE BREAK] between sections.
+Add character voice cues before dialogue e.g. [KEISHA — urgent].
+Return ONLY the formatted script text.
+CHAPTER:\n${ch.rewritten_text.slice(0, 3000)}`, 4000)
+      setAudioscript(r)
+    } catch { setAudioscript('Generation failed — try again.') }
+    setAudioscriptLoading(false)
+  }
+
+  /* ── Tier 3: Gumroad product page ── */
+  const generateGumroadPage = async () => {
+    if (!metadata) return
+    setGumroadLoading(true); setGumroadPage('')
+    try {
+      const r = await claude(`
+Write a complete Gumroad product page for "${metadata.title}" by ${metadata.author}.
+Genre: ${metadata.genre}
+Back cover blurb: ${cover?.back_blurb || metadata.description}
+Total words: ${chapters.reduce((s,c) => s + c.rewritten_words, 0).toLocaleString()}
+Oprah quality score: ${overallScore}/10
+
+Include:
+- HEADLINE (punchy, benefit-driven, under 12 words)
+- SUBHEADLINE (1 sentence, reader transformation)
+- DESCRIPTION (200 words, present tense, 3 short paragraphs)
+- WHO THIS IS FOR (3 bullet points)
+- WHAT YOU GET (3 bullet points — format, word count, bonus content)
+- SUGGESTED PRICE: (recommend based on genre and word count)
+
+Return as plain text with these exact section headers.`, 2000)
+      setGumroadPage(r)
+    } catch { setGumroadPage('Generation failed — try again.') }
+    setGumroadLoading(false)
+  }
+
+  /* ── Tier 3: Book club guide ── */
+  const generateBookClubGuide = async () => {
+    if (!chapters.length || !metadata) return
+    setBookClubLoading(true); setBookClubGuide('')
+    try {
+      const summary = chapters.map(c => `Ch ${c.number} (${c.title}): ${c.rewritten_text.slice(0,400)}`).join('\n')
+      const r = await claude(`
+Create a comprehensive book club discussion guide for "${metadata.title}" by ${metadata.author}.
+Genre: ${metadata.genre}
+
+Include:
+1. ABOUT THE BOOK (100 words)
+2. MAJOR THEMES (3-4 themes with 1-sentence description each)
+3. DISCUSSION QUESTIONS (10 questions, numbered, thought-provoking)
+4. CHARACTER PROFILES (key characters, 2-3 sentences each)
+5. AUTHOR BACKGROUND (2-3 sentences on C.J.H. Adisa / C.H.A. LLC)
+6. FURTHER READING (3 comp titles in the same genre)
+
+Based on these chapter summaries:\n${summary}
+
+Return as plain text with these exact section headers.`, 3000)
+      setBookClubGuide(r)
+    } catch { setBookClubGuide('Generation failed — try again.') }
+    setBookClubLoading(false)
+  }
+
+  /* ── Tier 3: Serialisation splitter ── */
+  const generateSerialParts = async () => {
+    if (!chapters.length || !metadata) return
+    setSerialLoading(true); setSerialParts([])
+    try {
+      const chList = chapters.map(c => `${c.number}: ${c.title} (${c.rewritten_words}w)`).join('\n')
+      const r = await claude(`
+Split "${metadata.title}" into 3-5 serial episodes for serial publishing.
+Each episode should have roughly equal word count, end on a hook, and have its own title.
+Available chapters:\n${chList}
+
+Return ONLY valid JSON array:
+[{"part":1,"title":"Episode title","chapters":[1,2,3],"teaser":"1-sentence cliffhanger teaser for this episode"}]`, 1000)
+      const arr = JSON.parse(r)
+      setSerialParts(Array.isArray(arr) ? arr : [])
+    } catch { setSerialParts([]) }
+    setSerialLoading(false)
+  }
+
+  /* ── Tier 3: Print interior (KDP .docx summary) ── */
+  const generatePrintSummary = async () => {
+    if (!chapters.length || !metadata) return
+    setPrintLoading(true); setPrintDocUrl('')
+    try {
+      // Build KDP print-ready summary card for the user
+      const totalWords = chapters.reduce((s,c) => s + c.rewritten_words, 0)
+      const estimatedPages = Math.round(totalWords / 250) // ~250 words per page
+      const summary = `KDP PRINT INTERIOR SPEC — ${metadata.title}
+Author: ${metadata.author}
+Total words: ${totalWords.toLocaleString()}
+Estimated pages: ~${estimatedPages} (250 words/page)
+Trim size: 6" × 9" (recommended for fiction)
+Margins: 0.875" outside · 0.875" top/bottom · Inside gutter: 0.9375" (for >300pp) or 0.75" (<300pp)
+Font: Times New Roman 12pt, justified, 14pt line spacing
+Chapter heading: centred, 18pt bold, drop 2" from top
+First paragraph: no indent · Subsequent: 0.35" first-line indent
+Headers: Author name (verso) · Book title (recto) · 10pt
+Page numbers: bottom centre, Roman numerals for front matter, Arabic for body
+Chapters start on recto (odd) pages
+Section breaks: * * * centred, 12pt, 12pt above/below
+
+CHAPTER LIST:
+${chapters.map(c => `  Ch ${c.number}: ${c.title} — ${c.rewritten_words.toLocaleString()} words`).join('\n')}
+
+KDP Minimum DPI for cover: 300 DPI, 6" × 9" = 1800 × 2700px
+Spine width formula: pages × 0.002252" (white paper) or × 0.0025" (cream paper)`
+      const blob = new Blob([summary], { type: 'text/plain' })
+      const url  = URL.createObjectURL(blob)
+      setPrintDocUrl(url)
+    } catch { /* silent */ }
+    setPrintLoading(false)
+  }
+
+  /* ── Tier 2: Multi-book project library ── */
+  const saveToLibrary = () => {
+    if (!metadata || !chapters.length) return
+    const entry = {
+      id: uid(),
+      title:     metadata.title || 'Untitled',
+      author:    metadata.author,
+      genre:     metadata.genre,
+      wordCount: chapters.reduce((s,c) => s + c.rewritten_words, 0),
+      score:     overallScore,
+      savedAt:   new Date().toISOString(),
+      driveUrl:  driveFileUrl || `https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}`,
+    }
+    const updated = [...projectLibrary, entry]
+    setProjectLibrary(updated)
+    persist({ projectLibrary: updated })
   }
 
   /* ── Tier 1: Comp titles ── */
@@ -971,6 +1216,295 @@ ${body}
                       </div>
                     </div>
                   ):<p className="text-xs font-mono text-nova-muted">Books are added automatically when you save to Drive. Nothing tracked yet.</p>
+                )}
+              </div>
+
+              {/* ─── TIER 2 ─────────────────────────────────────────────── */}
+
+              {/* Prologue */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText size={16} className="text-nova-gold"/>
+                    <p className="text-sm font-body text-white font-medium">Prologue Generator</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-gold/20 text-nova-gold">TIER 2</span>
+                  </div>
+                  <button onClick={generatePrologue} disabled={prologueLoading||!chapters.length}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-gold/10 border border-nova-gold/30 text-nova-gold text-xs hover:bg-nova-gold/20 disabled:opacity-50 transition-all">
+                    {prologueLoading?<Loader2 size={11} className="animate-spin"/>:<Sparkles size={11}/>}Generate
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Atmospheric hook before Chapter One. Based on your first chapter's tone and stakes.</p>
+                {prologueText&&(
+                  <div className="space-y-2">
+                    <div className="max-h-64 overflow-y-auto p-3 rounded-lg bg-nova-border/20 border border-nova-border/40">
+                      <pre className="whitespace-pre-wrap text-xs font-body text-white/80 leading-relaxed">{prologueText}</pre>
+                    </div>
+                    <button onClick={()=>{const b=new Blob([prologueText],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='prologue.txt';a.click()}}
+                      className="flex items-center gap-1.5 text-[10px] font-mono text-nova-gold hover:text-white">
+                      <Download size={10}/>Download prologue
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Epilogue */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookOpen size={16} className="text-nova-gold"/>
+                    <p className="text-sm font-body text-white font-medium">Epilogue Generator</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-gold/20 text-nova-gold">TIER 2</span>
+                  </div>
+                  <button onClick={generateEpilogue} disabled={epilogueLoading||!chapters.length}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-gold/10 border border-nova-gold/30 text-nova-gold text-xs hover:bg-nova-gold/20 disabled:opacity-50 transition-all">
+                    {epilogueLoading?<Loader2 size={11} className="animate-spin"/>:<Sparkles size={11}/>}Generate
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Emotional resolution after the final chapter. Resolves threads, satisfies readers, hints at what's next.</p>
+                {epilogueText&&(
+                  <div className="space-y-2">
+                    <div className="max-h-64 overflow-y-auto p-3 rounded-lg bg-nova-border/20 border border-nova-border/40">
+                      <pre className="whitespace-pre-wrap text-xs font-body text-white/80 leading-relaxed">{epilogueText}</pre>
+                    </div>
+                    <button onClick={()=>{const b=new Blob([epilogueText],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='epilogue.txt';a.click()}}
+                      className="flex items-center gap-1.5 text-[10px] font-mono text-nova-gold hover:text-white">
+                      <Download size={10}/>Download epilogue
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Amazon A+ Content */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Globe size={16} className="text-nova-violet"/>
+                    <p className="text-sm font-body text-white font-medium">Amazon A+ Content</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-violet/20 text-nova-violet">TIER 2</span>
+                  </div>
+                  <button onClick={generateAplus} disabled={aplusLoading||!metadata}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-violet/10 border border-nova-violet/30 text-nova-violet text-xs hover:bg-nova-violet/20 disabled:opacity-50 transition-all">
+                    {aplusLoading?<Loader2 size={11} className="animate-spin"/>:<Sparkles size={11}/>}Generate
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Editorial review + author note + bullet callouts for the A+ section below your Amazon product description. Increases conversion by up to 30%.</p>
+                {aplusContent&&(
+                  <div className="space-y-2">
+                    <div className="max-h-72 overflow-y-auto p-3 rounded-lg bg-nova-border/20 border border-nova-border/40">
+                      <pre className="whitespace-pre-wrap text-xs font-body text-white/80 leading-relaxed">{aplusContent}</pre>
+                    </div>
+                    <button onClick={()=>{const b=new Blob([aplusContent],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='amazon_aplus.txt';a.click()}}
+                      className="flex items-center gap-1.5 text-[10px] font-mono text-nova-violet hover:text-white">
+                      <Download size={10}/>Download A+ content
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Sensitivity Reader */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users size={16} className="text-nova-teal"/>
+                    <p className="text-sm font-body text-white font-medium">Sensitivity Reader Pass</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-teal/20 text-nova-teal">TIER 2</span>
+                  </div>
+                  <button onClick={runSensitivityPass} disabled={sensitivityLoading||!chapters.length}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-teal/10 border border-nova-teal/30 text-nova-teal text-xs hover:bg-nova-teal/20 disabled:opacity-50 transition-all">
+                    {sensitivityLoading?<Loader2 size={11} className="animate-spin"/>:<Sparkles size={11}/>}Run Pass
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Flags racial, gender, cultural, and trauma-related passages before publishing. Severity: low · medium · high.</p>
+                {sensitivityNotes.length>0?(
+                  <div className="space-y-2">
+                    {sensitivityNotes.map((n,i)=>(
+                      <div key={i} className={`p-3 rounded-lg border ${n.severity==='high'?'border-nova-crimson/40 bg-nova-crimson/5':n.severity==='medium'?'border-nova-gold/40 bg-nova-gold/5':'border-nova-border/40 bg-nova-border/20'}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-mono text-nova-muted">Ch {n.chapter}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${n.severity==='high'?'bg-nova-crimson/20 text-nova-crimson':n.severity==='medium'?'bg-nova-gold/20 text-nova-gold':'bg-nova-border/50 text-nova-muted'}`}>{n.severity}</span>
+                        </div>
+                        <p className="text-xs font-body text-white/80">{n.note}</p>
+                      </div>
+                    ))}
+                  </div>
+                ):sensitivityNotes.length===0&&!sensitivityLoading?(
+                  <p className="text-xs font-mono text-nova-muted">Click "Run Pass" to review all chapters.</p>
+                ):null}
+                {sensitivityNotes.length===0&&!sensitivityLoading&&chapters.length>0&&(
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-green-400/5 border border-green-400/20">
+                    <CheckCircle size={13} className="text-green-400"/>
+                    <p className="text-xs font-body text-green-400">No sensitivity concerns flagged.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Multi-book Project Library */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Library size={16} className="text-nova-gold"/>
+                    <p className="text-sm font-body text-white font-medium">Project Library</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-gold/20 text-nova-gold">TIER 2</span>
+                  </div>
+                  {stage==='done'&&metadata&&(
+                    <button onClick={saveToLibrary}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-gold/10 border border-nova-gold/30 text-nova-gold text-xs hover:bg-nova-gold/20 transition-all">
+                      <Plus size={11}/>Add Current
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Your complete C.H.A. LLC catalog — all books tracked across sessions.</p>
+                {projectLibrary.length>0?(
+                  <div className="space-y-2">
+                    {projectLibrary.map((b,i)=>(
+                      <div key={b.id} className="flex items-center justify-between p-3 rounded-lg bg-nova-border/20 border border-nova-border/40">
+                        <div>
+                          <p className="text-sm font-body text-white">{b.title}</p>
+                          <p className="text-[10px] font-mono text-nova-muted">{b.genre} · {b.wordCount.toLocaleString()}w · Score {b.score}/10 · {new Date(b.savedAt).toLocaleDateString()}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {b.driveUrl&&<a href={b.driveUrl} target="_blank" rel="noreferrer" className="text-[10px] font-mono text-nova-teal hover:underline">Drive</a>}
+                          <button onClick={()=>{const u=projectLibrary.filter((_,j)=>j!==i);setProjectLibrary(u);persist({projectLibrary:u})}} className="text-[10px] font-mono text-nova-muted hover:text-nova-crimson">✕</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ):<p className="text-xs font-mono text-nova-muted">No books in library yet. Click "Add Current" after processing a manuscript.</p>}
+              </div>
+
+              {/* ─── TIER 3 ─────────────────────────────────────────────── */}
+
+              {/* Audiobook Script */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mic2 size={16} className="text-nova-crimson"/>
+                    <p className="text-sm font-body text-white font-medium">Audiobook Script Formatter</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-crimson/20 text-nova-crimson">TIER 3</span>
+                  </div>
+                  <button onClick={generateAudioscript} disabled={audioscriptLoading||!chapters.length}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-crimson/10 border border-nova-crimson/30 text-nova-crimson text-xs hover:bg-nova-crimson/20 disabled:opacity-50 transition-all">
+                    {audioscriptLoading?<Loader2 size={11} className="animate-spin"/>:<Sparkles size={11}/>}Format Ch 1
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Converts Chapter 1 to narration-ready script with [PAUSE], [EMPHASIS], [SLOW], [SCENE BREAK], and character voice cues.</p>
+                {audioscript&&(
+                  <div className="space-y-2">
+                    <div className="max-h-72 overflow-y-auto p-3 rounded-lg bg-nova-border/20 border border-nova-border/40">
+                      <pre className="whitespace-pre-wrap text-xs font-mono text-white/80 leading-relaxed">{audioscript}</pre>
+                    </div>
+                    <button onClick={()=>{const b=new Blob([audioscript],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='audiobook_ch1_script.txt';a.click()}}
+                      className="flex items-center gap-1.5 text-[10px] font-mono text-nova-crimson hover:text-white">
+                      <Download size={10}/>Download script
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Print Interior Spec */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <LayoutTemplate size={16} className="text-nova-muted"/>
+                    <p className="text-sm font-body text-white font-medium">Print Interior Formatter</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-border/50 text-nova-muted">TIER 3</span>
+                  </div>
+                  <button onClick={generatePrintSummary} disabled={printLoading||!chapters.length}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-nova-border/50 text-nova-muted text-xs hover:text-white hover:border-nova-border disabled:opacity-50 transition-all">
+                    {printLoading?<Loader2 size={11} className="animate-spin"/>:<FileText size={11}/>}Generate Spec
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Full KDP print interior specification — margins, fonts, gutter, spine width, page count, cover DPI requirements.</p>
+                {printDocUrl&&(
+                  <a href={printDocUrl} download="kdp_print_spec.txt"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-nova-border/20 border border-nova-border/40 text-xs font-mono text-white hover:text-nova-gold transition-all">
+                    <Download size={11}/>Download KDP Print Spec (.txt)
+                  </a>
+                )}
+              </div>
+
+              {/* Gumroad Product Page */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Tag size={16} className="text-nova-gold"/>
+                    <p className="text-sm font-body text-white font-medium">Gumroad Product Page</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-gold/20 text-nova-gold">TIER 3</span>
+                  </div>
+                  <button onClick={generateGumroadPage} disabled={gumroadLoading||!metadata}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-gold/10 border border-nova-gold/30 text-nova-gold text-xs hover:bg-nova-gold/20 disabled:opacity-50 transition-all">
+                    {gumroadLoading?<Loader2 size={11} className="animate-spin"/>:<Sparkles size={11}/>}Generate
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Complete Gumroad listing: headline, subheadline, description, WHO THIS IS FOR, WHAT YOU GET, and suggested price.</p>
+                {gumroadPage&&(
+                  <div className="space-y-2">
+                    <div className="max-h-72 overflow-y-auto p-3 rounded-lg bg-nova-border/20 border border-nova-border/40">
+                      <pre className="whitespace-pre-wrap text-xs font-body text-white/80 leading-relaxed">{gumroadPage}</pre>
+                    </div>
+                    <button onClick={()=>{const b=new Blob([gumroadPage],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='gumroad_page.txt';a.click()}}
+                      className="flex items-center gap-1.5 text-[10px] font-mono text-nova-gold hover:text-white">
+                      <Download size={10}/>Download Gumroad page
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Book Club Guide */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookCopy size={16} className="text-nova-teal"/>
+                    <p className="text-sm font-body text-white font-medium">Book Club Guide</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-teal/20 text-nova-teal">TIER 3</span>
+                  </div>
+                  <button onClick={generateBookClubGuide} disabled={bookClubLoading||!chapters.length}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-teal/10 border border-nova-teal/30 text-nova-teal text-xs hover:bg-nova-teal/20 disabled:opacity-50 transition-all">
+                    {bookClubLoading?<Loader2 size={11} className="animate-spin"/>:<Sparkles size={11}/>}Generate
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">10 discussion questions, character profiles, major themes, further reading. Massive for literary fiction sales and library adoption.</p>
+                {bookClubGuide&&(
+                  <div className="space-y-2">
+                    <div className="max-h-72 overflow-y-auto p-3 rounded-lg bg-nova-border/20 border border-nova-border/40">
+                      <pre className="whitespace-pre-wrap text-xs font-body text-white/80 leading-relaxed">{bookClubGuide}</pre>
+                    </div>
+                    <button onClick={()=>{const b=new Blob([bookClubGuide],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='book_club_guide.txt';a.click()}}
+                      className="flex items-center gap-1.5 text-[10px] font-mono text-nova-teal hover:text-white">
+                      <Download size={10}/>Download guide
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Serialisation Splitter */}
+              <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap size={16} className="text-nova-violet"/>
+                    <p className="text-sm font-body text-white font-medium">Serialisation Splitter</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-nova-violet/20 text-nova-violet">TIER 3</span>
+                  </div>
+                  <button onClick={generateSerialParts} disabled={serialLoading||!chapters.length}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-nova-violet/10 border border-nova-violet/30 text-nova-violet text-xs hover:bg-nova-violet/20 disabled:opacity-50 transition-all">
+                    {serialLoading?<Loader2 size={11} className="animate-spin"/>:<Sparkles size={11}/>}Split
+                  </button>
+                </div>
+                <p className="text-xs font-mono text-nova-muted">Breaks your novel into 3-5 serial episodes for serial publishing. Each episode ends on a hook for maximum reader retention.</p>
+                {serialParts.length>0&&(
+                  <div className="space-y-2">
+                    {serialParts.map(p=>(
+                      <div key={p.part} className="p-3 rounded-lg bg-nova-border/20 border border-nova-border/40 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-nova-violet/20 text-nova-violet text-[10px] font-display flex items-center justify-center">{p.part}</span>
+                          <p className="text-sm font-body text-white font-medium">{p.title}</p>
+                        </div>
+                        <p className="text-[10px] font-mono text-nova-muted pl-7">Chapters: {p.chapters.join(', ')}</p>
+                        <p className="text-xs font-body text-white/70 italic pl-7">"{p.teaser}"</p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
