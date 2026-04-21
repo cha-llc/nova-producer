@@ -12,7 +12,6 @@ import Studio         from './pages/Studio'
 import Record         from './pages/Record'
 import Voice          from './pages/Voice'
 import CanvaCallback  from './pages/CanvaCallback'
-import BookEditor     from './pages/BookEditor'
 import Login          from './pages/Login'
 
 export default function App() {
@@ -38,7 +37,6 @@ export default function App() {
                 <Route path="/voice"    element={<Voice />} />
                 <Route path="/record"   element={<Record />} />
                 <Route path="/sph"      element={<SPHPipeline />} />
-                <Route path="/books"    element={<BookEditor />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </main>
