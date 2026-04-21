@@ -332,7 +332,7 @@ export default function BookEditor() {
     const sess  = await supabase.auth.getSession()
     const token = sess.data.session?.access_token || ''
 
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/sph-pipeline`, {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/nova-queue-processor`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

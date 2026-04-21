@@ -1,5 +1,5 @@
-// nova-queue-processor v4
-// Fix: corrected model name claude-sonnet-4-20250514 → claude-sonnet-4-5
+// nova-queue-processor v5
+// Fix: added action:'claude' proxy handler for BookEditor frontend
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SB_URL  = Deno.env.get('SUPABASE_URL')!;
@@ -38,6 +38,33 @@ async function notifySuccess(post: Record<string, unknown>) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+
+  // ── action:'claude' — general-purpose Claude proxy for BookEditor ──
+  let body: Record<string, unknown> = {};
+  try { body = await req.clone().json(); } catch { /* ignore — queue path uses no body */ }
+
+  if (body.action === 'claude') {
+    const messages  = body.messages as { role: string; content: string }[] | undefined;
+    const model     = String(body.model ?? 'claude-sonnet-4-5');
+    const maxTokens = Number(body.max_tokens ?? 4000);
+    if (!messages?.length) return j({ error: 'messages required' }, 400);
+
+    const apiKey = CLAUDE?.trim();
+    if (!apiKey) return j({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
+
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':         apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type':      'application/json',
+      },
+      body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
+    });
+    const data = await r.json();
+    if (!r.ok) return j({ error: (data as Record<string,Record<string,string>>)?.error?.message ?? 'Claude error', details: data }, r.status);
+    return j(data);
+  }
 
   const windowEnd = new Date(Date.now() + 5 * 60 * 1000).toISOString();
   const { data: duePosts, error: fetchErr } = await sb
