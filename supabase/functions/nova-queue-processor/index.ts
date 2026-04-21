@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
       headers: {
         'Content-Type': 'application/json',
         'anthropic-version': '2023-06-01',
-        'x-api-key': CLAUDE,
+        'x-api-key': await getAnthropicKey().catch(() => ''),
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
