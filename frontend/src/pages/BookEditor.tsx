@@ -200,18 +200,94 @@ export default function BookEditor() {
     } catch { /* ignore */ }
   }
 
-  /* file handling */
-  const handleFile = useCallback(async (file: File) => {
-    setFileName(file.name); setError('')
-    const text  = await file.text()
-    const clean = text.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, '\n').trim()
-    setRawText(clean)
+  /* file handling — multi-file queue */
+  const [fileQueue, setFileQueue] = useState<{name:string;text:string}[]>([])
+
+  const extractText = useCallback(async (file: File): Promise<string> => {
+    const name = file.name.toLowerCase()
+
+    // Apple Pages — ZIP containing index.xml (or word/document.xml for docx-exported)
+    if (name.endsWith('.pages')) {
+      try {
+        const buf = await file.arrayBuffer()
+        const bytes = new Uint8Array(buf)
+        // Pages files are ZIP archives — look for index.xml or similar XML entry
+        // We read the raw bytes as text and strip XML tags to extract prose
+        const raw = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+        // Extract text between XML tags, filtering out binary garbage
+        const xmlText = raw
+          .replace(/<sf:p[^>]*>/gi, '\n')   // paragraph breaks
+          .replace(/<[^>]+>/g, ' ')          // strip all tags
+          .replace(/[^\x20-\x7E\n\t]/g, ' ') // remove non-printable bytes
+          .replace(/\s{3,}/g, '\n\n')        // normalise whitespace
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+        // If we got meaningful text (>100 chars of actual words), use it
+        const wordCount = xmlText.split(/\s+/).filter(w => /^[a-zA-Z]{2,}$/.test(w)).length
+        if (wordCount > 50) return xmlText
+        // Fallback: try reading as plain text
+        return await file.text()
+      } catch {
+        return await file.text()
+      }
+    }
+
+    // .docx / .doc — strip XML tags from raw bytes
+    if (name.endsWith('.docx') || name.endsWith('.doc')) {
+      try {
+        const buf  = await file.arrayBuffer()
+        const raw  = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(buf))
+        const text = raw
+          .replace(/<w:p[ >]/gi, '\n')  // paragraph tags → newline
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/[^\x20-\x7E\n\t]/g, ' ')
+          .replace(/\s{3,}/g, '\n\n')
+          .trim()
+        const wordCount = text.split(/\s+/).filter(w => /^[a-zA-Z]{2,}$/.test(w)).length
+        if (wordCount > 30) return text
+        return await file.text()
+      } catch {
+        return await file.text()
+      }
+    }
+
+    // .txt / .md — plain text
+    const text = await file.text()
+    return text.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, '\n').trim()
+  }, [])
+
+  const addFiles = useCallback(async (files: FileList | File[]) => {
+    setError('')
+    const arr = Array.from(files)
+    const results: {name:string;text:string}[] = []
+    for (const f of arr) {
+      const text = await extractText(f)
+      if (text.trim()) results.push({ name: f.name, text })
+    }
+    if (!results.length) { setError('No readable text found in selected files.'); return }
+    setFileQueue(prev => {
+      const updated = [...prev, ...results]
+      // Merge all text into rawText for pipeline consumption
+      setRawText(updated.map(f => f.text).join('\n\n'))
+      setFileName(updated.map(f => f.name).join(', '))
+      return updated
+    })
+  }, [extractText])
+
+  // Keep rawText in sync when queue changes
+  const removeFile = useCallback((idx: number) => {
+    setFileQueue(prev => {
+      const updated = prev.filter((_, i) => i !== idx)
+      setRawText(updated.map(f => f.text).join('\n\n'))
+      setFileName(updated.map(f => f.name).join(', '))
+      return updated
+    })
   }, [])
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0])
-  }, [handleFile])
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files)
+  }, [addFiles])
 
   /* Claude helper */
   const claude = async (prompt: string, maxTokens = 4000): Promise<string> => {
@@ -782,13 +858,35 @@ ${body}
               </div>
             )}
             <div onDrop={onDrop} onDragOver={e=>e.preventDefault()} onClick={()=>fileRef.current?.click()}
-              className="border-2 border-dashed border-nova-border/60 rounded-xl p-8 text-center cursor-pointer hover:border-nova-violet/50 hover:bg-nova-violet/5 transition-all">
-              <Upload size={28} className="mx-auto text-nova-muted mb-3"/>
-              <p className="text-white font-body text-sm mb-1">{fileName||'Drop your manuscript here'}</p>
-              <p className="text-nova-muted text-xs">{fileName?`${rawText.split(/\s+/).length.toLocaleString()} words detected`:'.txt, .md, .docx — or paste below'}</p>
-              <input ref={fileRef} type="file" accept=".txt,.md,.docx,.doc" className="hidden"
-                onChange={e=>{if(e.target.files?.[0])handleFile(e.target.files[0])}}/>
+              className="border-2 border-dashed border-nova-border/60 rounded-xl p-6 text-center cursor-pointer hover:border-nova-violet/50 hover:bg-nova-violet/5 transition-all">
+              <Upload size={26} className="mx-auto text-nova-muted mb-2"/>
+              <p className="text-white font-body text-sm mb-1">Drop manuscripts here — or click to browse</p>
+              <p className="text-nova-muted text-xs">.txt · .md · .docx · .doc · .pages (Apple) — multiple files OK</p>
+              <input ref={fileRef} type="file" multiple
+                accept=".txt,.md,.docx,.doc,.pages,application/vnd.apple.pages,application/x-iwork-pages-sffpages"
+                className="hidden"
+                onChange={e=>{if(e.target.files?.length) addFiles(e.target.files)}}/>
             </div>
+
+            {/* File queue */}
+            {fileQueue.length>0&&(
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-mono text-nova-muted">{fileQueue.length} FILE{fileQueue.length!==1?'S':''} QUEUED · {rawText.split(/\s+/).filter(Boolean).length.toLocaleString()} WORDS TOTAL</p>
+                {fileQueue.map((f,i)=>(
+                  <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-nova-border/20 border border-nova-border/40">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText size={12} className="text-nova-violet shrink-0"/>
+                      <span className="text-xs font-mono text-white truncate">{f.name}</span>
+                      <span className="text-[10px] font-mono text-nova-muted shrink-0">{f.text.split(/\s+/).filter(Boolean).length.toLocaleString()}w</span>
+                    </div>
+                    <button onClick={e=>{e.stopPropagation();removeFile(i)}}
+                      className="text-nova-muted hover:text-nova-crimson transition-all ml-2 shrink-0">
+                      <X size={11}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <textarea value={rawText} onChange={e=>setRawText(e.target.value)}
               placeholder="Or paste manuscript text here…"
               className="w-full h-32 bg-nova-navydark border border-nova-border rounded-lg px-4 py-3 text-sm font-body text-white placeholder-nova-muted resize-none focus:outline-none focus:border-nova-violet/50"/>
@@ -1562,7 +1660,7 @@ ${body}
                 )}
                 <div className="p-5 rounded-xl bg-nova-navydark border border-nova-border space-y-3">
                   <div className="flex items-center gap-2"><RefreshCw size={16} className="text-nova-muted"/><p className="text-sm font-body text-white font-medium">New Manuscript</p></div>
-                  <button onClick={()=>{setStage('idle');setRawText('');setFileName('');setChapters([]);setCover(null);setMetadata(null);setOverallScore(0);setAvgRL(0);setProgress(0);setError('');setDriveStatus('idle');setDriveFileUrl('');setEpubStatus('idle');setCompTitles([])}}
+                  <button onClick={()=>{setStage('idle');setRawText('');setFileName('');setChapters([]);setCover(null);setMetadata(null);setOverallScore(0);setAvgRL(0);setProgress(0);setError('');setDriveStatus('idle');setDriveFileUrl('');setEpubStatus('idle');setCompTitles([]);setFileQueue([])}}
                     className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-nova-border/50 text-nova-muted text-sm hover:text-white hover:border-nova-border transition-all">
                     <Plus size={13}/>New Manuscript
                   </button>
