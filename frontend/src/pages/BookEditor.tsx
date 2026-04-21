@@ -203,58 +203,96 @@ export default function BookEditor() {
   /* file handling — multi-file queue */
   const [fileQueue, setFileQueue] = useState<{name:string;text:string}[]>([])
 
+  /* Unzip a file entry from a ZIP archive (docx / pages are both ZIPs).
+     Uses fflate loaded from CDN — lightweight, pure-JS, no install needed. */
+  const unzipEntry = async (buf: ArrayBuffer, entryName: string): Promise<string | null> => {
+    return new Promise((resolve) => {
+      try {
+        // Dynamically load fflate from CDN if not already present
+        const load = (): Promise<{ unzipSync: (data: Uint8Array) => Record<string, Uint8Array> }> => {
+          return new Promise((res, rej) => {
+            if ((window as unknown as Record<string, unknown>).fflate) {
+              res((window as unknown as Record<string, unknown>).fflate as { unzipSync: (d: Uint8Array) => Record<string, Uint8Array> })
+              return
+            }
+            const script = document.createElement('script')
+            script.src = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js'
+            script.onload = () => res((window as unknown as Record<string, unknown>).fflate as { unzipSync: (d: Uint8Array) => Record<string, Uint8Array> })
+            script.onerror = () => rej(new Error('fflate load failed'))
+            document.head.appendChild(script)
+          })
+        }
+
+        load().then(fflate => {
+          const zip     = fflate.unzipSync(new Uint8Array(buf))
+          const entry   = zip[entryName]
+          if (!entry) { resolve(null); return }
+          resolve(new TextDecoder('utf-8', { fatal: false }).decode(entry))
+        }).catch(() => resolve(null))
+      } catch {
+        resolve(null)
+      }
+    })
+  }
+
+  /* Strip XML/OOXML markup and normalise to readable paragraphs */
+  const stripXml = (xml: string): string =>
+    xml
+      .replace(/<w:br[^/]*/gi, '\n')          // word line breaks
+      .replace(/<\/w:p>/gi, '\n')              // end of paragraph → newline
+      .replace(/<\/a:p>/gi, '\n')              // Apple paragraph end
+      .replace(/<sf:br[^/]*/gi, '\n')          // pages line break
+      .replace(/<[^>]+>/g, '')                 // strip all remaining tags
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&apos;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&#x[0-9A-Fa-f]+;/g, ' ')
+      .replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\uFFFF]/g, ' ') // remove control chars
+      .replace(/[ \t]{2,}/g, ' ')             // collapse spaces
+      .replace(/\n{3,}/g, '\n\n')             // collapse blank lines
+      .trim()
+
   const extractText = useCallback(async (file: File): Promise<string> => {
     const name = file.name.toLowerCase()
 
-    // Apple Pages — ZIP containing index.xml (or word/document.xml for docx-exported)
+    // .docx — ZIP containing word/document.xml
+    if (name.endsWith('.docx') || name.endsWith('.doc')) {
+      try {
+        const buf     = await file.arrayBuffer()
+        const xmlText = await unzipEntry(buf, 'word/document.xml')
+        if (xmlText) {
+          const clean = stripXml(xmlText)
+          const words = clean.split(/\s+/).filter(w => /\w{2,}/.test(w)).length
+          if (words > 30) return clean
+        }
+      } catch { /* fall through */ }
+      // Fallback: raw text (will show garbage for binary docx, but won't crash)
+      return (await file.text()).replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\uFFFF]/g, ' ').replace(/\s{3,}/g, '\n\n').trim()
+    }
+
+    // .pages — ZIP containing index.xml (iWork native format)
     if (name.endsWith('.pages')) {
       try {
         const buf = await file.arrayBuffer()
-        const bytes = new Uint8Array(buf)
-        // Pages files are ZIP archives — look for index.xml or similar XML entry
-        // We read the raw bytes as text and strip XML tags to extract prose
-        const raw = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
-        // Extract text between XML tags, filtering out binary garbage
-        const xmlText = raw
-          .replace(/<sf:p[^>]*>/gi, '\n')   // paragraph breaks
-          .replace(/<[^>]+>/g, ' ')          // strip all tags
-          .replace(/[^\x20-\x7E\n\t]/g, ' ') // remove non-printable bytes
-          .replace(/\s{3,}/g, '\n\n')        // normalise whitespace
-          .replace(/\n{3,}/g, '\n\n')
-          .trim()
-        // If we got meaningful text (>100 chars of actual words), use it
-        const wordCount = xmlText.split(/\s+/).filter(w => /^[a-zA-Z]{2,}$/.test(w)).length
-        if (wordCount > 50) return xmlText
-        // Fallback: try reading as plain text
-        return await file.text()
-      } catch {
-        return await file.text()
-      }
-    }
-
-    // .docx / .doc — strip XML tags from raw bytes
-    if (name.endsWith('.docx') || name.endsWith('.doc')) {
-      try {
-        const buf  = await file.arrayBuffer()
-        const raw  = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(buf))
-        const text = raw
-          .replace(/<w:p[ >]/gi, '\n')  // paragraph tags → newline
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/[^\x20-\x7E\n\t]/g, ' ')
-          .replace(/\s{3,}/g, '\n\n')
-          .trim()
-        const wordCount = text.split(/\s+/).filter(w => /^[a-zA-Z]{2,}$/.test(w)).length
-        if (wordCount > 30) return text
-        return await file.text()
-      } catch {
-        return await file.text()
-      }
+        // Try iWork native format first
+        let xmlText = await unzipEntry(buf, 'index.xml')
+        // Some Pages files export as docx-compatible
+        if (!xmlText) xmlText = await unzipEntry(buf, 'word/document.xml')
+        if (xmlText) {
+          const clean = stripXml(xmlText)
+          const words = clean.split(/\s+/).filter(w => /\w{2,}/.test(w)).length
+          if (words > 30) return clean
+        }
+      } catch { /* fall through */ }
+      return (await file.text()).replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\uFFFF]/g, ' ').replace(/\s{3,}/g, '\n\n').trim()
     }
 
     // .txt / .md — plain text
     const text = await file.text()
     return text.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, '\n').trim()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     setError('')
@@ -289,17 +327,30 @@ export default function BookEditor() {
     if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files)
   }, [addFiles])
 
-  /* Claude helper */
+  /* Claude helper — proxied via Supabase edge function to avoid CORS block */
   const claude = async (prompt: string, maxTokens = 4000): Promise<string> => {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const sess  = await supabase.auth.getSession()
+    const token = sess.data.session?.access_token || ''
+
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/sph-auto-pipeline`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514', max_tokens: maxTokens,
-        messages: [{ role: 'user', content: prompt }]
-      })
+        action:     'claude',
+        model:      'claude-sonnet-4-5',
+        max_tokens: maxTokens,
+        messages:   [{ role: 'user', content: prompt }],
+      }),
     })
-    if (!r.ok) throw new Error(`Claude ${r.status}`)
+
+    if (!r.ok) {
+      const errData = await r.json().catch(() => ({})) as Record<string, unknown>
+      throw new Error(String(errData?.error ?? `Claude proxy error ${r.status}`))
+    }
+
     const d   = await r.json()
     const raw = (d.content?.find((b: { type: string }) => b.type === 'text')?.text || '').trim()
     return raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()

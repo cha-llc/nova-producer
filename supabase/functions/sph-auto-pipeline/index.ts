@@ -344,5 +344,35 @@ Deno.serve(async (req) => {
     return j({ success: true, episode_id: episodeId, social_content_id: socialContentId, scheduled_at: scheduledAt });
   }
 
+  // ─────────────────────────────────────────────
+  // ACTION: claude — general purpose Claude proxy
+  // Used by Book Editor and other frontend tools
+  // ─────────────────────────────────────────────
+  if (action === 'claude') {
+    const messages  = body.messages  as { role: string; content: string }[] | undefined;
+    const model     = String(body.model     ?? 'claude-sonnet-4-5');
+    const maxTokens = Number(body.max_tokens ?? 4000);
+
+    if (!messages?.length) return j({ error: 'messages required' }, 400);
+
+    let anthropicKey: string;
+    try { anthropicKey = await getAnthropicKey(); }
+    catch { return j({ error: 'ANTHROPIC_API_KEY not configured' }, 500); }
+
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':         anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'content-type':      'application/json',
+      },
+      body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
+    });
+
+    const data = await r.json();
+    if (!r.ok) return j({ error: data?.error?.message ?? 'Claude error', details: data }, r.status);
+    return j(data);
+  }
+
   return j({ error: `Unknown action: ${action}` }, 400);
 });
