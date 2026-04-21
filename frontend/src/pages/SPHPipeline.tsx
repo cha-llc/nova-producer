@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Loader2, RefreshCw, Play, CheckCircle, Clock, ChevronDown, ChevronUp, StopCircle, Flag } from 'lucide-react'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
-const PIPELINE_URL = `${SUPABASE_URL}/functions/v1/sph-pipeline`
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL as string
+const SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6enpxc21xcWFvaWxrbXNrYWRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NjYzMjQsImV4cCI6MjA5MTQ0MjMyNH0.vYkiz5BeoJlhNzcEiiGQfsHLE5UfqJbTTBjNXk1xxJs'
+const PIPELINE_URL  = `${SUPABASE_URL}/functions/v1/sph-pipeline`
+const PIPELINE_HEADERS = {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${SUPABASE_ANON}`,
+}
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Motivation vs. Discipline':      '#C9A84C',
@@ -33,7 +39,7 @@ export default function SPHPipeline() {
 
   async function load() {
     setLoading(true)
-    const r = await fetch(`${PIPELINE_URL}?action=status`)
+    const r = await fetch(`${PIPELINE_URL}?action=status`, { headers: PIPELINE_HEADERS })
     const d = await r.json()
     setWeeks(d.weeks ?? [])
     setLoading(false)
@@ -44,7 +50,7 @@ export default function SPHPipeline() {
   async function approve(weekNum: number) {
     setActing(weekNum); setMsg('')
     const r = await fetch(PIPELINE_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: PIPELINE_HEADERS,
       body: JSON.stringify({ action: 'approve', week_number: weekNum }),
     })
     const d = await r.json()
@@ -56,7 +62,7 @@ export default function SPHPipeline() {
   async function stopProduction(weekNum: number) {
     setActing(weekNum); setMsg('')
     const r = await fetch(PIPELINE_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: PIPELINE_HEADERS,
       body: JSON.stringify({ action: 'stop', week_number: weekNum }),
     })
     const d = await r.json()
@@ -68,7 +74,7 @@ export default function SPHPipeline() {
   async function markComplete(weekNum: number) {
     setActing(weekNum); setMsg('')
     const r = await fetch(PIPELINE_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: PIPELINE_HEADERS,
       body: JSON.stringify({ action: 'complete', week_number: weekNum }),
     })
     const d = await r.json()
@@ -81,7 +87,7 @@ export default function SPHPipeline() {
     setActing(weekNum)
     setMsg(`⏳ Generating 7 scripts for Week ${weekNum} — this takes ~15 seconds…`)
     const r = await fetch(PIPELINE_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: PIPELINE_HEADERS,
       body: JSON.stringify({ action: 'generate', week_number: weekNum }),
     })
     const d = await r.json()
