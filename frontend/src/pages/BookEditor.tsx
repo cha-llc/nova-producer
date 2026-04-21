@@ -410,12 +410,21 @@ SAMPLE:\n${sample}`, 1000)
       const gl = GENRE_OPTIONS.find(g => g.value === genre)?.label || 'Fiction'
       const vc = activeVoice && voiceLocked
         ? `\nVOICE (preserve): Tone=${activeVoice.tone} POV=${activeVoice.pov} Sentences=${activeVoice.sentences} Vocabulary=${activeVoice.vocabulary}\n${activeVoice.fingerprint}` : ''
-      const res = await claude(`
+      const rewriteText = await claude(`
 World-class ${gl} editor. Oprah Book Club standard.${vc}
-Return ONLY valid JSON:
-{"title":"","rewritten_text":"","oprah_score":8,"feedback":"2 sentences","title_suggestions":["","",""]}
+Rewrite this chapter. Output ONLY the rewritten prose — no JSON, no commentary, no title header.
 CHAPTER ${ch.number}: ${ch.title}\n${ch.rewritten_text}`, 8000)
-      const obj = safeParseJson(res, { title: ch.title, rewritten_text: ch.rewritten_text, oprah_score: ch.oprah_score, feedback: ch.feedback, title_suggestions: [] })
+      const scoreRes = await claude(`Rate this rewritten chapter. Return ONLY valid JSON:
+{"title":"improved title","oprah_score":8,"feedback":"2 sentences","title_suggestions":["alt1","alt2","alt3"]}
+CHAPTER: ${rewriteText.slice(0, 500)}`, 500)
+      const scoreObj = safeParseJson(scoreRes, { title: ch.title, oprah_score: ch.oprah_score, feedback: ch.feedback, title_suggestions: [] })
+      const obj = {
+        title: scoreObj.title || ch.title,
+        rewritten_text: rewriteText || ch.rewritten_text,
+        oprah_score: scoreObj.oprah_score || ch.oprah_score,
+        feedback: scoreObj.feedback || ch.feedback,
+        title_suggestions: scoreObj.title_suggestions || [],
+      }
       const rl  = fleschKincaid(obj.rewritten_text || ch.rewritten_text)
       u[idx] = {
         ...ch,
@@ -703,12 +712,45 @@ Return ONLY valid JSON array:
 
     try {
       setStage('parsing'); setProgress(5); setStatusMsg('Parsing manuscript structure…')
+
+      // PARSE STRATEGY: ask Claude for chapter BOUNDARIES only (tiny response),
+      // then split the raw text on the frontend. Never return the full text in JSON.
       const parseRes = await claude(`
-Parse this manuscript into chapters. Return ONLY valid JSON.
-{"title":"","chapters":[{"number":1,"title":"","text":""}]}
-Max 20 chapters. MANUSCRIPT:\n${rawText.slice(0, 40000)}`, 8000)
-      const parsed = safeParseJson(parseRes, { title: '', chapters: [] })
-      const raw    = (parsed.chapters as {number:number;title:string;text:string}[]) || []
+Identify the chapters in this manuscript. Return ONLY valid JSON — no full text.
+{"title":"","author":"","chapters":[{"number":1,"title":"Chapter title","startPhrase":"exact first 8 words of chapter"}]}
+Max 20 chapters. MANUSCRIPT (first 8000 chars for structure detection):\n${rawText.slice(0, 8000)}`, 2000)
+      const parsed = safeParseJson(parseRes, { title: '', author: '', chapters: [] })
+
+      // Split the raw text into chapter segments using startPhrase markers
+      type ChapterMarker = { number: number; title: string; startPhrase: string }
+      const markers: ChapterMarker[] = (parsed.chapters as ChapterMarker[]) || []
+
+      // Build raw chapters array by splitting on startPhrases
+      const raw: {number:number; title:string; text:string}[] = []
+      if (markers.length > 0) {
+        for (let mi = 0; mi < markers.length; mi++) {
+          const marker    = markers[mi]
+          const phrase    = marker.startPhrase?.trim().slice(0, 40)
+          const startIdx  = phrase ? rawText.indexOf(phrase) : -1
+          const nextPhrase = markers[mi + 1]?.startPhrase?.trim().slice(0, 40)
+          const endIdx    = nextPhrase ? rawText.indexOf(nextPhrase) : rawText.length
+          const text      = startIdx >= 0 ? rawText.slice(startIdx, endIdx > startIdx ? endIdx : rawText.length).trim() : ''
+          if (text.length > 50) raw.push({ number: marker.number, title: marker.title, text })
+        }
+      }
+
+      // Fallback: if marker splitting failed, chunk the text every ~3000 words
+      if (!raw.length) {
+        const words = rawText.split(/\s+/)
+        const chunkSize = 3000
+        for (let wi = 0; wi < words.length; wi += chunkSize) {
+          const num  = Math.floor(wi / chunkSize) + 1
+          const text = words.slice(wi, wi + chunkSize).join(' ')
+          raw.push({ number: num, title: `Chapter ${num}`, text })
+          if (num >= 20) break
+        }
+      }
+
       if (!raw.length) throw new Error('No chapters found.')
 
       const gl = GENRE_OPTIONS.find(g => g.value === genre)?.label || 'Fiction'
@@ -722,13 +764,26 @@ Max 20 chapters. MANUSCRIPT:\n${rawText.slice(0, 40000)}`, 8000)
         const ch = raw[i]
         setProgress(10 + Math.round((i / raw.length) * 55))
         setStatusMsg(`Rewriting Chapter ${ch.number}: ${ch.title}…`)
-        const res = await claude(`
+        // TWO-CALL STRATEGY: get rewritten text as plain text (no JSON truncation),
+        // then get score/feedback as tiny JSON separately.
+        const rewriteText = await claude(`
 World-class ${gl} editor. Oprah Book Club standard. Expand, dramatise, add dialogue. Min 3x word count if under 1000w.${vc}
-Return ONLY valid JSON:
-{"title":"","rewritten_text":"","oprah_score":8,"feedback":"2 sentences","title_suggestions":["","",""]}
+Rewrite this chapter. Output ONLY the rewritten prose — no JSON, no commentary, no title header.
 CHAPTER ${ch.number}: ${ch.title}\n${ch.text}`, 8000)
-        let obj: { title: string; rewritten_text: string; oprah_score: number; feedback: string; title_suggestions: string[] }
-        obj = safeParseJson(res, { title: ch.title, rewritten_text: ch.text, oprah_score: 5, feedback: '', title_suggestions: [] })
+
+        const scoreRes = await claude(`
+Rate this rewritten chapter. Return ONLY valid JSON (no other text):
+{"title":"improved chapter title","oprah_score":8,"feedback":"2 sentences","title_suggestions":["alt1","alt2","alt3"]}
+CHAPTER: ${rewriteText.slice(0, 500)}`, 500)
+        const scoreObj = safeParseJson(scoreRes, { title: ch.title, oprah_score: 7, feedback: '', title_suggestions: [] })
+
+        const obj = {
+          title:             scoreObj.title            || ch.title,
+          rewritten_text:    rewriteText               || ch.text,
+          oprah_score:       scoreObj.oprah_score      || 7,
+          feedback:          scoreObj.feedback         || '',
+          title_suggestions: scoreObj.title_suggestions || [],
+        }
         const rl = fleschKincaid(obj.rewritten_text || ch.text)
         rewritten.push({
           number: ch.number, title: obj.title || ch.title,
