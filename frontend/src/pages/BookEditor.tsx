@@ -356,6 +356,28 @@ export default function BookEditor() {
     return raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   }
 
+  /* Safe JSON parse — handles truncated responses (unterminated strings) */
+  const safeParseJson = (raw: string, fallback: Record<string, unknown> = {}) => {
+    // 1. Try clean parse first
+    try { return JSON.parse(raw) } catch { /* fall through */ }
+    // 2. Attempt to salvage truncated JSON by closing open strings/braces
+    let s = raw.trim()
+    // Remove trailing partial key/value after last complete comma or opening brace
+    s = s.replace(/,\s*"[^"]*$/, '').replace(/,\s*[^,{}"\[\]]*$/, '')
+    // Close any open string
+    const opens = (s.match(/(?<!\\)"/g) || []).length
+    if (opens % 2 !== 0) s += '"'
+    // Close open arrays and objects
+    const unclosed = []
+    for (const ch of s) { if (ch === '{' || ch === '[') unclosed.push(ch); else if (ch === '}') unclosed.pop(); else if (ch === ']') unclosed.pop() }
+    for (const ch of unclosed.reverse()) s += ch === '{' ? '}' : ']'
+    try { return JSON.parse(s) } catch { /* fall through */ }
+    // 3. Extract rewritten_text field directly via regex (most important field)
+    const textMatch = raw.match(/"rewritten_text"\s*:\s*"((?:[^"\\]|\\.)*)/)
+    if (textMatch) return { ...fallback, rewritten_text: textMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') }
+    return fallback
+  }
+
   /* ── Tier 1: Voice capture ── */
   const captureVoice = async () => {
     if (!chapters.length || !newVoiceName.trim()) return
@@ -392,8 +414,8 @@ SAMPLE:\n${sample}`, 1000)
 World-class ${gl} editor. Oprah Book Club standard.${vc}
 Return ONLY valid JSON:
 {"title":"","rewritten_text":"","oprah_score":8,"feedback":"2 sentences","title_suggestions":["","",""]}
-CHAPTER ${ch.number}: ${ch.title}\n${ch.rewritten_text}`, 5000)
-      const obj = JSON.parse(res)
+CHAPTER ${ch.number}: ${ch.title}\n${ch.rewritten_text}`, 8000)
+      const obj = safeParseJson(res, { title: ch.title, rewritten_text: ch.rewritten_text, oprah_score: ch.oprah_score, feedback: ch.feedback, title_suggestions: [] })
       const rl  = fleschKincaid(obj.rewritten_text || ch.rewritten_text)
       u[idx] = {
         ...ch,
@@ -704,10 +726,9 @@ Max 20 chapters. MANUSCRIPT:\n${rawText.slice(0, 40000)}`)
 World-class ${gl} editor. Oprah Book Club standard. Expand, dramatise, add dialogue. Min 3x word count if under 1000w.${vc}
 Return ONLY valid JSON:
 {"title":"","rewritten_text":"","oprah_score":8,"feedback":"2 sentences","title_suggestions":["","",""]}
-CHAPTER ${ch.number}: ${ch.title}\n${ch.text}`, 5000)
+CHAPTER ${ch.number}: ${ch.title}\n${ch.text}`, 8000)
         let obj: { title: string; rewritten_text: string; oprah_score: number; feedback: string; title_suggestions: string[] }
-        try { obj = JSON.parse(res) }
-        catch { obj = { title: ch.title, rewritten_text: ch.text, oprah_score: 5, feedback: '', title_suggestions: [] } }
+        obj = safeParseJson(res, { title: ch.title, rewritten_text: ch.text, oprah_score: 5, feedback: '', title_suggestions: [] })
         const rl = fleschKincaid(obj.rewritten_text || ch.text)
         rewritten.push({
           number: ch.number, title: obj.title || ch.title,
@@ -812,16 +833,22 @@ ${body}
       const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>${title}</title>
 <style>body{font-family:Georgia,serif;line-height:1.7;max-width:680px;margin:3em auto;padding:0 1.5em}h1{font-size:2em;text-align:center}h2{font-size:1.3em;text-align:center;margin-top:3em}p{text-indent:1.5em;margin:.3em 0}.byline{text-align:center;color:#555}</style></head>
 <body><h1>${title}</h1>${metadata.subtitle?`<p class="byline"><em>${metadata.subtitle}</em></p>`:''}<p class="byline">by ${author}</p><p class="byline">&#169; ${new Date().getFullYear()} ${author} &#183; C.H.A. LLC</p><hr/><h2>Contents</h2><ol>${toc}</ol><hr/>${body}</body></html>`
-      const b64  = btoa(unescape(encodeURIComponent(html)))
+      // Upload via nova-drive-upload edge function (uses service account)
       const sess = await supabase.auth.getSession()
-      const dr   = await fetch(`${SUPABASE_URL}/functions/v1/nova-drive-upload`, {
+      const token = sess.data.session?.access_token || ''
+      const dr = await fetch(`${SUPABASE_URL}/functions/v1/nova-drive-upload`, {
         method: 'POST',
-        headers: { 'Content-Type':'application/json', Authorization:`Bearer ${sess.data.session?.access_token}` },
-        body: JSON.stringify({ title:`${title} — ${author} (KDP EPUB).html`, content:b64, mimeType:'text/html', parentId:DRIVE_FOLDER_ID })
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          fileName: `${title} — ${author} (KDP).html`,
+          content:  html,
+          mimeType: 'text/html',
+          parentId: DRIVE_FOLDER_ID,
+        })
       })
       if (dr.ok) {
         const dd = await dr.json()
-        setDriveFileUrl(dd.id ? `https://drive.google.com/file/d/${dd.id}/view` : `https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}`)
+        setDriveFileUrl(dd.webViewLink || `https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}`)
       } else {
         setDriveFileUrl(`https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}`)
         downloadEpub()
