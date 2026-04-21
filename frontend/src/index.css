@@ -42,3 +42,12 @@
   .status-done       { @apply nova-badge bg-green-900/40 text-green-400; }
   .status-failed     { @apply nova-badge bg-nova-crimson/20 text-nova-crimson; }
 }
+
+/* Hide scrollbar on nav overflow */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
