@@ -1,4 +1,4 @@
-// sph-pipeline v8
+// sph-pipeline v11 — fix: verify_jwt=false (v8 accidentally required JWT → 401 blank page)
 // APPROVE now auto-triggers sph-auto-pipeline → HeyGen → social content → Socialblu schedule
 // Model: claude-sonnet-4-5 (fixed from claude-sonnet-4-20250514)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
