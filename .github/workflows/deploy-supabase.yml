@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -16,7 +17,7 @@ jobs:
         with:
           version: latest
 
-      - name: Deploy all edge functions
+      - name: Deploy edge functions
         run: |
           supabase functions deploy sph-auto-pipeline --project-ref vzzzqsmqqaoilkmskadl --no-verify-jwt
           supabase functions deploy nova-claude       --project-ref vzzzqsmqqaoilkmskadl --no-verify-jwt
