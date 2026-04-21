@@ -1,12 +1,21 @@
-// nova-queue-processor v5
-// Fix: added action:'claude' proxy handler for BookEditor frontend
+// nova-queue-processor v6
+// Fix: vault_read_anthropic_key RPC for BookEditor (key in Vault, not env)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SB_URL  = Deno.env.get('SUPABASE_URL')!;
 const SB_SVC  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SLACK   = Deno.env.get('SLACK_BOT_TOKEN')!;
-const CLAUDE  = Deno.env.get('ANTHROPIC_API_KEY')!;
 const sb      = createClient(SB_URL, SB_SVC);
+
+async function getAnthropicKey(): Promise<string> {
+  try {
+    const { data } = await sb.rpc('vault_read_anthropic_key');
+    if (data && String(data).length > 30 && !String(data).includes('PLACEHOLDER')) return String(data).trim();
+  } catch {}
+  const k = Deno.env.get('ANTHROPIC_API_KEY')?.trim();
+  if (k && k.length > 30) return k;
+  throw new Error('ANTHROPIC_API_KEY not in Vault or env');
+}
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -49,8 +58,8 @@ Deno.serve(async (req) => {
     const maxTokens = Number(body.max_tokens ?? 4000);
     if (!messages?.length) return j({ error: 'messages required' }, 400);
 
-    const apiKey = CLAUDE?.trim();
-    if (!apiKey) return j({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
+    let apiKey: string;
+    try { apiKey = await getAnthropicKey(); } catch (e) { return j({ error: String(e) }, 500); }
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
