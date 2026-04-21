@@ -7,6 +7,9 @@ on:
       - 'supabase/functions/**'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -19,7 +22,14 @@ jobs:
 
       - name: Deploy edge functions
         run: |
-          supabase functions deploy sph-auto-pipeline --project-ref vzzzqsmqqaoilkmskadl --no-verify-jwt
-          supabase functions deploy nova-claude       --project-ref vzzzqsmqqaoilkmskadl --no-verify-jwt
+          # verify-jwt OFF — public proxies / cron triggers
+          supabase functions deploy nova-queue-processor --project-ref vzzzqsmqqaoilkmskadl --no-verify-jwt
+          supabase functions deploy sph-auto-pipeline    --project-ref vzzzqsmqqaoilkmskadl --no-verify-jwt
+          supabase functions deploy nova-claude          --project-ref vzzzqsmqqaoilkmskadl --no-verify-jwt
+          supabase functions deploy nova-poll            --project-ref vzzzqsmqqaoilkmskadl --no-verify-jwt
+          # verify-jwt ON — authenticated endpoints
+          supabase functions deploy sph-pipeline         --project-ref vzzzqsmqqaoilkmskadl
+          supabase functions deploy ai-show-producer     --project-ref vzzzqsmqqaoilkmskadl
+          supabase functions deploy nova-scheduler       --project-ref vzzzqsmqqaoilkmskadl
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
