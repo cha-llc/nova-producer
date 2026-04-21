@@ -833,12 +833,21 @@ ${body}
       const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>${title}</title>
 <style>body{font-family:Georgia,serif;line-height:1.7;max-width:680px;margin:3em auto;padding:0 1.5em}h1{font-size:2em;text-align:center}h2{font-size:1.3em;text-align:center;margin-top:3em}p{text-indent:1.5em;margin:.3em 0}.byline{text-align:center;color:#555}</style></head>
 <body><h1>${title}</h1>${metadata.subtitle?`<p class="byline"><em>${metadata.subtitle}</em></p>`:''}<p class="byline">by ${author}</p><p class="byline">&#169; ${new Date().getFullYear()} ${author} &#183; C.H.A. LLC</p><hr/><h2>Contents</h2><ol>${toc}</ol><hr/>${body}</body></html>`
-      // Upload via nova-drive-upload edge function (uses service account)
+      // Upload via nova-drive-upload edge function
       const sess = await supabase.auth.getSession()
-      const token = sess.data.session?.access_token || ''
+      const supaToken = sess.data.session?.access_token || ''
+
+      // Try to get Google OAuth token from Supabase session provider_token
+      // (available when user signed in via Google OAuth)
+      const googleToken = (sess.data.session as Record<string, string> | null)?.provider_token || ''
+
       const dr = await fetch(`${SUPABASE_URL}/functions/v1/nova-drive-upload`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type':   'application/json',
+          'Authorization':  `Bearer ${supaToken}`,
+          'X-Google-Token': googleToken,
+        },
         body: JSON.stringify({
           fileName: `${title} — ${author} (KDP).html`,
           content:  html,
@@ -848,6 +857,7 @@ ${body}
       })
       if (dr.ok) {
         const dd = await dr.json()
+        // webViewLink = Drive URL, or Storage URL if fallback
         setDriveFileUrl(dd.webViewLink || `https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}`)
       } else {
         setDriveFileUrl(`https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}`)

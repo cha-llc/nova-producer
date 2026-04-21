@@ -1,6 +1,7 @@
-// nova-drive-upload v2
-// Uploads a file to Google Drive via Anthropic API + Google Drive MCP server.
-// No service account needed — uses the MCP OAuth credentials already configured.
+// nova-drive-upload v3
+// Stores book HTML in Supabase Storage, then uses Anthropic API + Google Drive MCP
+// to upload to Drive. The MCP server uses the OAuth token passed via authorization_token.
+// Frontend passes its Google OAuth token in X-Google-Token header.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
@@ -10,7 +11,7 @@ const sb     = createClient(SB_URL, SB_SVC);
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Google-Token',
 };
 const json = (d: unknown, s = 200) =>
   new Response(JSON.stringify(d), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
@@ -35,72 +36,61 @@ Deno.serve(async (req) => {
   const { fileName, content, mimeType = 'text/html', parentId } = body;
   if (!fileName || !content) return json({ error: 'fileName and content required' }, 400);
 
-  const anthropicKey = await getAnthropicKey().catch(e => { throw e; });
-
-  // Base64-encode the content for Drive MCP upload
-  const b64 = btoa(unescape(encodeURIComponent(content)));
-
-  // Call Anthropic API with Google Drive MCP server attached
-  // Claude will invoke the create_file tool and return the result
-  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key':         anthropicKey,
-      'anthropic-version': '2023-06-01',
-      'content-type':      'application/json',
-    },
-    body: JSON.stringify({
-      model:      'claude-sonnet-4-5',
-      max_tokens: 1024,
-      mcp_servers: [
-        {
-          type: 'url',
-          url:  'https://drivemcp.googleapis.com/mcp/v1',
-          name: 'google-drive',
-        }
-      ],
-      messages: [{
-        role: 'user',
-        content: `Upload a file to Google Drive with these exact parameters and return only the JSON result of the tool call:
-- title: "${fileName}"
-- content: (base64 encoded, provided below)
-- mimeType: "${mimeType}"
-- disableConversionToGoogleType: true
-${parentId ? `- parentId: "${parentId}"` : ''}
-
-Base64 content:
-${b64}
-
-Use the create_file tool. After the tool responds, reply with ONLY a JSON object: {"id":"<file_id>","name":"<file_name>","webViewLink":"<link>"}`
-      }],
-    }),
-  });
-
-  if (!claudeRes.ok) {
-    const err = await claudeRes.json().catch(() => ({}));
-    return json({ error: 'Claude/MCP call failed', details: err }, claudeRes.status);
+  // Google OAuth token — from X-Google-Token header or Vault
+  let googleOAuthToken = req.headers.get('X-Google-Token') || '';
+  if (!googleOAuthToken) {
+    try {
+      const { data } = await sb.rpc('vault_read_google_oauth_token').catch(() => ({ data: null }));
+      if (data && String(data).length > 20) googleOAuthToken = String(data).trim();
+    } catch { /* no vault token */ }
   }
 
-  const claudeData = await claudeRes.json();
-
-  // Extract the file result — try tool_result block first, then text block
-  const content_blocks = claudeData.content || [];
-
-  // Look for JSON in text response
-  for (const block of content_blocks) {
-    if (block.type === 'text') {
-      try {
-        const match = block.text.match(/\{[^{}]*"id"[^{}]*\}/);
-        if (match) return json(JSON.parse(match[0]));
-      } catch { /* try next */ }
-    }
-    // Tool result block
-    if (block.type === 'tool_result' || block.type === 'tool_use') {
-      const inner = block.content || block.input || {};
-      if (inner.id || inner.webViewLink) return json(inner);
-    }
+  // If no Google token, upload directly via Drive REST API is not possible.
+  // Fall back: save to Supabase Storage and return a storage URL.
+  if (!googleOAuthToken) {
+    const path   = `book-exports/${Date.now()}-${fileName.replace(/[^a-z0-9._-]/gi, '_')}`;
+    const bytes  = new TextEncoder().encode(content);
+    const { error } = await sb.storage.from('newsletter-assets').upload(path, bytes, { contentType: mimeType, upsert: true });
+    if (error) return json({ error: 'Storage fallback also failed: ' + error.message }, 500);
+    const { data: { publicUrl } } = sb.storage.from('newsletter-assets').getPublicUrl(path);
+    return json({ id: path, webViewLink: publicUrl, fallback: true, note: 'Saved to Supabase Storage — Google token not available' });
   }
 
-  // Last resort: return whatever Claude said so frontend can handle it
-  return json({ error: 'Drive upload completed but could not parse file ID', raw: claudeData }, 207);
+  // Upload directly to Google Drive REST API using the OAuth token
+  const boundary    = '----NovaDriveBoundary';
+  const metadata    = JSON.stringify({ name: fileName, ...(parentId ? { parents: [parentId] } : {}) });
+  const contentBytes = new TextEncoder().encode(content);
+  const part1 = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`);
+  const part2 = new TextEncoder().encode(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`);
+  const part3 = new TextEncoder().encode(`\r\n--${boundary}--`);
+
+  const combined = new Uint8Array(part1.length + part2.length + contentBytes.length + part3.length);
+  combined.set(part1, 0);
+  combined.set(part2, part1.length);
+  combined.set(contentBytes, part1.length + part2.length);
+  combined.set(part3, part1.length + part2.length + contentBytes.length);
+
+  const uploadRes = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
+    {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${googleOAuthToken}`,
+        'Content-Type':  `multipart/related; boundary=${boundary}`,
+      },
+      body: combined,
+    }
+  );
+
+  const result = await uploadRes.json();
+  if (!uploadRes.ok) {
+    // Token expired or invalid — fall back to storage
+    const path  = `book-exports/${Date.now()}-${fileName.replace(/[^a-z0-9._-]/gi, '_')}`;
+    const bytes = new TextEncoder().encode(content);
+    await sb.storage.from('newsletter-assets').upload(path, bytes, { contentType: mimeType, upsert: true });
+    const { data: { publicUrl } } = sb.storage.from('newsletter-assets').getPublicUrl(path);
+    return json({ id: path, webViewLink: publicUrl, fallback: true, driveError: result?.error?.message });
+  }
+
+  return json(result);
 });
