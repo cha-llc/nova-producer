@@ -107,6 +107,30 @@ Deno.serve(async (req) => {
     return json({ success: true, week: weekNum });
   }
 
+  // ── claude — general purpose proxy for Book Editor and other frontend tools ──
+  if (action === 'claude') {
+    const messages  = body.messages as { role: string; content: string }[] | undefined;
+    const model     = String(body.model ?? 'claude-sonnet-4-5');
+    const maxTokens = Number(body.max_tokens ?? 4000);
+    if (!messages?.length) return json({ error: 'messages required' }, 400);
+
+    const apiKey = Deno.env.get('ANTHROPIC_API_KEY')?.trim();
+    if (!apiKey) return json({ error: 'ANTHROPIC_API_KEY not set in Supabase secrets' }, 500);
+
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':         apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type':      'application/json',
+      },
+      body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
+    });
+    const data = await r.json();
+    if (!r.ok) return json({ error: data?.error?.message ?? 'Claude error', details: data }, r.status);
+    return json(data);
+  }
+
   const { data } = await sb.from('sph_topics').select('*').order('week_number');
   return json({ weeks: data });
 });
