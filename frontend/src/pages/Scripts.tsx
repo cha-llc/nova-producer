@@ -149,11 +149,19 @@ export default function Scripts() {
     setProducing(script.id)
     setProduceMsg(p => ({ ...p, [script.id]: '' }))
     try {
-      // Directly call ai-show-producer — no trigger, no auto-fire
+      // Call ai-show-producer with proper auth, timeout, and error handling
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+      
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
+      
       const r = await fetch(`${SUPABASE_URL}/functions/v1/ai-show-producer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        },
         body: JSON.stringify({
           script_id:       script.id,
           show_name:       show.show_name,
@@ -163,7 +171,15 @@ export default function Scripts() {
           show_color:      show.color ?? '#1A1A2E',
           background_url:  show.background_url ?? '',
         }),
+        signal: controller.signal,
       })
+      
+      clearTimeout(timeout)
+      
+      if (!r.ok) {
+        throw new Error(`Edge Function error: ${r.status} ${r.statusText}`)
+      }
+      
       const d = await r.json()
       if (d.success) {
         setProduceMsg(p => ({ ...p, [script.id]: 'Submitted to HeyGen ✓' }))
