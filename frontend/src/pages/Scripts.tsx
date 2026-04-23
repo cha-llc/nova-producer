@@ -65,7 +65,7 @@ export default function Scripts() {
     const [{ data: sc }, { data: sh }] = await Promise.all([
       supabase.from('show_scripts')
         .select('id,show_id,series_topic,series_part,series_week_start,part_title,script_text,caption,status,post_date,post_time_utc')
-        .order('post_date', { ascending: true }).order('series_part', { ascending: true }),
+        .order('status', { ascending: false }).order('post_date', { ascending: false }).order('series_part', { ascending: true }),
       supabase.from('show_configs').select('id,show_name,display_name,color,avatar_id,heygen_voice_id,voice_id,background_url').order('display_name'),
     ])
     const scripts = sc ?? []

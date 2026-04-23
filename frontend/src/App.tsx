@@ -7,7 +7,6 @@ import Episodes       from './pages/Episodes'
 import Scheduler      from './pages/Scheduler'
 import AccountSettings from './pages/AccountSettings'
 import Settings       from './pages/Settings'
-import SPHPipeline    from './pages/SPHPipeline'
 import Studio         from './pages/Studio'
 import Record         from './pages/Record'
 import Voice          from './pages/Voice'
@@ -36,7 +35,6 @@ export default function App() {
                 <Route path="/studio"   element={<Studio />} />
                 <Route path="/voice"    element={<Voice />} />
                 <Route path="/record"   element={<Record />} />
-                <Route path="/sph"      element={<SPHPipeline />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </main>

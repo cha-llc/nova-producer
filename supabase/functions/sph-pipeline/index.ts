@@ -51,27 +51,16 @@ Deno.serve(async (req) => {
 
     await sb.from('sph_topics').update({ status: 'producing' }).eq('id', topic.id);
 
-    // Kick off full auto-pipeline
-    try {
-      await fetch(`${SB_URL}/functions/v1/sph-auto-pipeline`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SB_SVC}` },
-        body: JSON.stringify({ action: 'start', topic_id: topic.id }),
-      });
-    } catch (e) {
-      await slack(`⚠️ *SPH Week ${weekNum}* | Auto-pipeline trigger failed: ${String(e).slice(0, 100)}`);
-    }
-
     await slack(
-      `🎬 *SPH Week ${weekNum} APPROVED + AUTO-PIPELINE STARTED*\n` +
+      `🎬 *SPH Week ${weekNum} APPROVED*\n` +
       `📖 "${topic.topic}"\n` +
-      `🤖 ${updated?.length ?? 0} scripts → HeyGen → social content → auto-scheduling\n` +
-      `📅 Posts schedule at 01:00, 05:00, 13:00 UTC automatically`
+      `🤖 ${updated?.length ?? 0} scripts marked ready\n` +
+      `→ Go to Scripts page to produce individual parts`
     );
 
     return json({
       success: true, queued: updated?.length, parts: updated,
-      message: `Auto-pipeline started — ${updated?.length ?? 0} HeyGen renders queued`,
+      message: `${updated?.length ?? 0} scripts marked ready — go to Scripts to produce`,
     });
   }
 
