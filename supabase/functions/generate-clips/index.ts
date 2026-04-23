@@ -72,7 +72,7 @@ export const generateClips = async (request: Request, context: EdgeFunctionConte
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'claude-opus-4-20250514',
+              model: 'claude-opus-4-5',
               max_tokens: 2000,
               system: `You are an expert at identifying viral moments in podcast transcripts.
               

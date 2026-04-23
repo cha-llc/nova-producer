@@ -1,3 +1,4 @@
+import GuestGate from '../components/GuestGate'
 import { useEffect, useState } from 'react'
 import { Send, Check, AlertCircle, Clock, TrendingUp, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -127,6 +128,7 @@ export default function Scheduler() {
   }
 
   return (
+    <GuestGate pageName="Scheduler">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -260,5 +262,6 @@ export default function Scheduler() {
         </p>
       </div>
     </div>
+    </GuestGate>
   )
-}
+}

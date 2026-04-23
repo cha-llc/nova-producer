@@ -1,3 +1,4 @@
+import GuestGate from '../components/GuestGate'
 import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, Filter, Library, Tv } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -117,7 +118,7 @@ export default function Episodes() {
   })
 
   return (
-    <>
+    <GuestGate pageName="Episodes">
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -247,6 +248,6 @@ export default function Episodes() {
           onClose={() => setScheduleEp(null)}
           onScheduled={() => { setScheduleEp(null); load() }} />
       )}
-    </>
+    </GuestGate>
   )
 }

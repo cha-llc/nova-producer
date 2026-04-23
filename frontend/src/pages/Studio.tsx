@@ -1,3 +1,4 @@
+import GuestGate from '../components/GuestGate'
 import { useEffect, useState, useCallback } from 'react'
 import {
   Brain, Sparkles, Copy, Check, RefreshCw, Loader2, Hash, Zap,
@@ -190,6 +191,7 @@ export default function Studio() {
   const busy = genState !== 'idle'
 
   return (
+    <GuestGate pageName="Content Studio">
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
@@ -576,5 +578,6 @@ export default function Studio() {
         </div>
       </div>
     </div>
+    </GuestGate>
   )
-}
+}

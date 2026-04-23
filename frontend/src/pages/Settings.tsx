@@ -1,3 +1,4 @@
+import GuestGate from '../components/GuestGate'
 import { useEffect, useState, useCallback } from 'react'
 import { Settings2, Save, Loader2, Check, ExternalLink, Info, BookOpen, Brain, Mic, Palette, Link2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -115,6 +116,7 @@ export default function Settings() {
     .replace(/\b\w/g, c => c.toUpperCase())
 
   return (
+    <GuestGate pageName="Settings">
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="font-display text-3xl text-white tracking-wide flex items-center gap-3">
@@ -365,5 +367,6 @@ export default function Settings() {
         </>
       )}
     </div>
+    </GuestGate>
   )
-}
+}

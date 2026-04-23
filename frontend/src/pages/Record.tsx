@@ -1,3 +1,4 @@
+import GuestGate from '../components/GuestGate'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Video, VideoOff, Mic, MicOff, Play, Square, Pause, Upload,
@@ -532,6 +533,7 @@ export default function Record() {
   const isTrimmed = trimStart > 0.1 || (duration > 0 && trimEnd < duration - 0.1)
 
   return (
+    <GuestGate pageName="Record">
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
@@ -1133,5 +1135,6 @@ export default function Record() {
         </div>
       )}
     </div>
+    </GuestGate>
   )
-}
+}

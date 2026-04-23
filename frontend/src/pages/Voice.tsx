@@ -1,3 +1,4 @@
+import GuestGate from '../components/GuestGate'
 import { useEffect, useState } from 'react'
 import { Mic, Loader2, Check, Play, AlertCircle, RefreshCw, PlusCircle, Volume2 } from 'lucide-react'
 import type { NovaVoiceClone } from '../types'
@@ -108,6 +109,7 @@ export default function Voice() {
   const allVoices = [...elVoices, ...stdVoices.slice(0, 10)]
 
   return (
+    <GuestGate pageName="Voice Studio">
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
@@ -268,5 +270,6 @@ export default function Voice() {
         </div>
       )}
     </div>
+    </GuestGate>
   )
-}
+}
