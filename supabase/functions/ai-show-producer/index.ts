@@ -7,7 +7,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL      = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SVC_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ELEVENLABS_KEY    = Deno.env.get("ELEVENLABS_API_KEY")!;
 const HEYGEN_KEY        = Deno.env.get("HEYGEN_API_KEY")!;
 const SLACK_BOT_TOKEN   = Deno.env.get("SLACK_BOT_TOKEN")!;
 const SOCIALBLU_KEY     = Deno.env.get("SOCIALBLU_API_KEY")!;
@@ -81,14 +80,14 @@ async function uploadAudio(bytes: Uint8Array, show: string, scriptId: string): P
 
 // ── Step 3: HeyGen avatar video ───────────────────────────────────────────────
 
-async function submitHeyGen(audioUrl: string, avatarId: string, title: string): Promise<string> {
+async function submitHeyGen(scriptText: string, voiceId: string, avatarId: string, title: string): Promise<string> {
   const res = await fetch("https://api.heygen.com/v2/video/generate", {
     method: "POST",
     headers: { "X-Api-Key": HEYGEN_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
       video_inputs: [{
         character: { type: "avatar", avatar_id: avatarId, avatar_style: "normal" },
-        voice:     { type: "audio", audio_url: audioUrl },
+        voice:     { type: "text", input_text: scriptText, voice_id: voiceId },
         background:{ type: "color", value: BG_COLOR },
       }],
       dimension: { width: 1080, height: 1920 },
@@ -210,31 +209,20 @@ Deno.serve(async (req) => {
     if (sErr || !script) throw new Error(`Script not found: ${sErr?.message || 'unknown'}`);
     console.log(`[NOVA] Script fetched: ${scriptId}`);
 
-    // Step 1 — Voice
-    console.log(`[NOVA] Starting ElevenLabs TTS with voiceId: ${voiceId}`);
-    await slack(SLACK.deployments, `🎤 Generating voice via ElevenLabs…`);
-    const audioBytes = await generateAudio(script.script_text, voiceId);
-    console.log(`[NOVA] Audio generated: ${audioBytes.length} bytes`);
-
-    // Step 2 — Audio upload
-    console.log(`[NOVA] Uploading audio to Supabase Storage`);
-    const audioUrl = await uploadAudio(audioBytes, showName, scriptId);
-    console.log(`[NOVA] Audio uploaded: ${audioUrl}`);
-
-    // Step 3 — HeyGen video
-    console.log(`[NOVA] Submitting to HeyGen with avatarId: ${avatarId}`);
-    await slack(SLACK.deployments, `🎬 Submitting to HeyGen avatar pipeline…`);
-    const videoId      = await submitHeyGen(audioUrl, avatarId, `${showName} — ${scriptId}`);
+    // Step 1 — HeyGen video with built-in voice
+    console.log(`[NOVA] Submitting to HeyGen with voiceId: ${voiceId}, avatarId: ${avatarId}`);
+    await slack(SLACK.deployments, `🎬 Submitting to HeyGen avatar + voice pipeline…`);
+    const videoId      = await submitHeyGen(script.script_text, voiceId, avatarId, `${showName} — ${scriptId}`);
     console.log(`[NOVA] HeyGen video submitted: ${videoId}`);
     
     const heygenUrl    = await pollHeyGen(videoId);
     console.log(`[NOVA] HeyGen video completed: ${heygenUrl}`);
 
-    // Update episode with audio URL
+    // Update episode with HeyGen URL
     console.log(`[NOVA] Updating episode with URLs`);
-    await updateEpisode(scriptId, { audio_url: audioUrl, heygen_video_url: heygenUrl });
+    await updateEpisode(scriptId, { heygen_video_url: heygenUrl });
 
-    // Step 4 — Store video
+    // Step 2 — Store video
     console.log(`[NOVA] Storing video in Supabase Storage`);
     await slack(SLACK.deployments, `📦 Storing episode in Supabase Storage…`);
     const storageUrl = await storeVideo(heygenUrl, showName, scriptId);
