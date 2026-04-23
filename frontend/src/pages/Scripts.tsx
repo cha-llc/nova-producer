@@ -1,9 +1,10 @@
 import GuestGate from '../components/GuestGate'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Loader2, RefreshCw, ChevronDown, ChevronUp,
   Copy, Check, Save, Play, Search, Plus, X, RotateCcw,
-  AlertTriangle, Zap, CheckCircle, AlertCircle, Hash, MessageSquare, Sparkles, Trash2, Wand2
+  AlertTriangle, Zap, CheckCircle, AlertCircle, Hash, MessageSquare, Sparkles, Trash2, Wand2,
+  Tv, Instagram as InstagramIcon, Twitter, PinIcon, Layers
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -11,7 +12,19 @@ type Script = {
   id: string; show_id: string; series_topic: string; series_part: number | null
   series_week_start: string | null; part_title: string; script_text: string
   caption: string; status: string; post_date: string | null; post_time_utc: string
+  platform: string
 }
+
+const PLATFORMS = [
+  { id: 'youtube',   label: 'YouTube',   emoji: '▶️', color: '#FF0000', desc: 'Long-form, chapters, timestamps' },
+  { id: 'linkedin',  label: 'LinkedIn',  emoji: '💼', color: '#0077B5', desc: 'Professional, frameworks, articles' },
+  { id: 'instagram', label: 'Instagram', emoji: '📸', color: '#E1306C', desc: 'Visual storytelling, reels, saves' },
+  { id: 'tiktok',    label: 'TikTok',    emoji: '🎵', color: '#010101', desc: 'Hook-driven, trending, short clips' },
+  { id: 'x',         label: 'X',         emoji: '𝕏',  color: '#1DA1F2', desc: 'Thread-style, punchy, quote-worthy' },
+  { id: 'pinterest', label: 'Pinterest', emoji: '📌', color: '#E60023', desc: 'Step-by-step, SEO, save-worthy' },
+  { id: 'reddit',    label: 'Reddit',    emoji: '🤖', color: '#FF4500', desc: 'Community voice, authentic, discussion' },
+] as const
+type PlatformId = typeof PLATFORMS[number]['id']
 type ShowInfo = { id: string; show_name: string; display_name: string; color: string; avatar_id: string; heygen_voice_id: string; background_url: string }
 type SocialContent = { script_id: string; hook: string; caption: string; cta: string; hashtags: string[]; status: string }
 
@@ -60,12 +73,14 @@ export default function Scripts() {
   const [creating, setCreating]     = useState(false)
   const [form, setForm]             = useState({ ...EMPTY_FORM })
   const [createError, setCreateError] = useState('')
+  const [platformPicker, setPlatformPicker] = useState<string | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     const [{ data: sc, error: scriptError }, { data: sh }] = await Promise.all([
       supabase.from('show_scripts')
-        .select('id,show_id,series_topic,series_part,series_week_start,part_title,script_text,caption,status,post_date,post_time_utc')
+        .select('id,show_id,series_topic,series_part,series_week_start,part_title,script_text,caption,status,post_date,post_time_utc,platform')
         .order('status', { ascending: true })
         .order('post_date', { ascending: true }),
       supabase.from('show_configs').select('id,show_name,display_name,color,avatar_id,heygen_voice_id,background_url').order('display_name'),
@@ -195,6 +210,17 @@ export default function Scripts() {
       setProduceMsg(p => ({ ...p, [script.id]: `Error: ${String(e)}` }))
     }
     setProducing(null)
+  }
+
+  // Generate script with NOVA — save platform then set status to scripting
+  const generateScript = async (scriptId: string, platform: PlatformId) => {
+    setPlatformPicker(null)
+    // Optimistic UI
+    setScripts(prev => prev.map(s => s.id === scriptId ? { ...s, status: 'scripting', platform } : s))
+    await supabase.from('show_scripts')
+      .update({ platform, status: 'scripting', scripting_started_at: new Date().toISOString() })
+      .eq('id', scriptId)
+    load()
   }
 
   const createScript = async () => {
@@ -349,6 +375,9 @@ export default function Scripts() {
             const isScripting = script.status === 'scripting'
             const isDeleting  = deleting  === script.id
             const confirming  = confirmDelete === script.id
+            const canGenerate = ['draft','failed'].includes(script.status) && !isScripting
+            const activePlatform = PLATFORMS.find(p => p.id === (script.platform || 'youtube')) ?? PLATFORMS[0]
+            const isPlatformOpen = platformPicker === script.id
 
             return (
               <div key={script.id} className="nova-card">
@@ -409,17 +438,54 @@ export default function Scripts() {
                     {isScripting && (
                       <div className="mt-2 flex items-center gap-2 text-xs font-mono rounded-lg px-3 py-2 border border-blue-400/25" style={{ background: 'rgba(96,165,250,0.06)' }}>
                         <Loader2 size={11} className="animate-spin flex-shrink-0 text-blue-400" />
-                        <span className="text-blue-300">NOVA is writing this script — status will flip to <strong>ready</strong> automatically.</span>
+                        <span className="text-blue-300">NOVA is writing this {activePlatform.emoji} <strong>{activePlatform.label}</strong> script — status will flip to <strong>ready</strong> automatically.</span>
                       </div>
+                    )}
+                    {/* Platform badge */}
+                    {!isScripting && script.platform && script.platform !== 'youtube' && (
+                      <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-mono px-1.5 py-0.5 rounded border border-nova-border/60 text-nova-muted">
+                        {activePlatform.emoji} {activePlatform.label}
+                      </span>
                     )}
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                     {/* Produce button — only when draft/failed, not scripting, and has script */}
-                    {!hasScript && ['draft','failed'].includes(script.status) && !isScripting && (
-                      <span className="text-[10px] font-mono text-nova-muted italic">
-                        ← write script first
-                      </span>
+                    {/* Generate script button with platform picker */}
+                    {canGenerate && (
+                      <div className="relative" ref={isPlatformOpen ? pickerRef : undefined}>
+                        <button
+                          onClick={() => setPlatformPicker(isPlatformOpen ? null : script.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono border border-nova-border/60 text-nova-muted hover:text-nova-gold hover:border-nova-gold/40 transition-all"
+                        >
+                          <Wand2 size={11} />
+                          {activePlatform.emoji} Generate
+                        </button>
+                        {/* Platform picker dropdown */}
+                        {isPlatformOpen && (
+                          <div className="absolute right-0 top-full mt-1 z-50 w-64 rounded-xl border border-nova-border bg-nova-navydark shadow-2xl overflow-hidden">
+                            <div className="px-3 py-2 border-b border-nova-border/50">
+                              <p className="text-[10px] font-mono text-nova-muted uppercase tracking-widest">Write for platform</p>
+                            </div>
+                            {PLATFORMS.map(p => (
+                              <button
+                                key={p.id}
+                                onClick={() => generateScript(script.id, p.id)}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-nova-border/30 transition-colors group"
+                              >
+                                <span className="text-base">{p.emoji}</span>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-mono text-white font-medium">{p.label}</p>
+                                  <p className="text-[10px] font-mono text-nova-muted">{p.desc}</p>
+                                </div>
+                                {(script.platform || 'youtube') === p.id && (
+                                  <Check size={11} className="ml-auto text-nova-gold flex-shrink-0" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                     {canProduce && !isScripting && (
                       <button onClick={() => produceWithNova(script)} disabled={isProducing}
