@@ -1,33 +1,35 @@
-// Supabase Edge Function: ai-show-producer
+// ai-show-producer v34
 // NOVA — Network Output & Voice Automator
-// Triggered by: database trigger on show_scripts.status = 'ready'
-//               OR direct POST { script_id, show_name, voice_id, avatar_id }
-
+// HeyGen-only pipeline. No ElevenLabs. Vault-first key loading.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL      = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SVC_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const HEYGEN_KEY        = Deno.env.get("HEYGEN_API_KEY")!;
-const SLACK_BOT_TOKEN   = Deno.env.get("SLACK_BOT_TOKEN")!;
-const SOCIALBLU_KEY     = Deno.env.get("SOCIALBLU_API_KEY")!;
+const SUPABASE_URL     = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SVC_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SLACK_BOT_TOKEN  = Deno.env.get("SLACK_BOT_TOKEN")!;
 
-// Slack channels (CARD 1B)
 const SLACK = {
-  deployments: "C0ASNB7QGM7",
+  nova:        "C0ATS0LJ1BL",
   salesLog:    "C0ASCQV5RNY",
   techAlerts:  "C0ARTQ4USMV",
   escalations: "C0AT3NDG5BJ",
 };
 
-// Socialblu account IDs (CARD 4)
-const SOCIALBLU = { tiktok: 165296, instagram: 165297, youtube: 165298, pinterest: 177489 };
-
-// CHA brand navy for video background
 const BG_COLOR = "#1A1A2E";
+const MAX_HEYGEN_CHARS = 4900;
 
 const sb = createClient(SUPABASE_URL, SUPABASE_SVC_KEY);
 
-// ── Utilities ────────────────────────────────────────────────────────────────
+const CORS = {
+  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
+};
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status, headers: { ...CORS, "Content-Type": "application/json" }
+  });
+}
 
 async function slack(channel: string, text: string) {
   await fetch("https://slack.com/api/chat.postMessage", {
@@ -37,244 +39,140 @@ async function slack(channel: string, text: string) {
   }).catch(() => {});
 }
 
-async function logError(ctx: string, err: unknown) {
-  const msg = `🚨 *NOVA ai-show-producer* | ${ctx}\n\`\`\`${String(err)}\`\`\``;
-  await slack(SLACK.techAlerts, msg);
-  console.error("[NOVA]", ctx, err);
+// Vault-first HeyGen key loading
+async function getHeyGenKey(): Promise<string> {
+  try {
+    const { data, error } = await sb.rpc("vault_read_heygen_key");
+    if (!error && data) {
+      const k = String(data).trim();
+      if (k.length > 10) return k;
+    }
+  } catch {}
+  const envKey = Deno.env.get("HEYGEN_API_KEY")?.trim();
+  if (envKey && envKey.length > 10) return envKey;
+  throw new Error("HEYGEN_API_KEY not found in vault or env");
 }
 
-async function updateEpisode(scriptId: string, patch: Record<string, unknown>) {
-  await sb.from("ai_episodes").update(patch).eq("script_id", scriptId);
+// Truncate to HeyGen's 4900-char limit at sentence boundary
+function truncateScript(text: string): string {
+  if (text.length <= MAX_HEYGEN_CHARS) return text;
+  const t = text.slice(0, MAX_HEYGEN_CHARS);
+  const last = Math.max(t.lastIndexOf('. '), t.lastIndexOf('?\n'), t.lastIndexOf('.\n'));
+  return last > 4000 ? t.slice(0, last + 1) : t;
 }
 
-async function updateScript(id: string, status: string) {
-  await sb.from("show_scripts").update({ status }).eq("id", id);
-}
+async function submitHeyGen(
+  scriptText: string, voiceId: string, avatarId: string,
+  title: string, bgUrl: string, heygenKey: string
+): Promise<string> {
+  const text = truncateScript(scriptText);
+  const background = bgUrl?.startsWith('http')
+    ? { type: "image", url: bgUrl }
+    : { type: "color", value: BG_COLOR };
 
-// ── Step 1: ElevenLabs voice clone ───────────────────────────────────────────
-
-async function generateAudio(text: string, voiceId: string): Promise<Uint8Array> {
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-    method: "POST",
-    headers: { "xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      text,
-      model_id: "eleven_multilingual_v2",
-      voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.3 },
-    }),
-  });
-  if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${await res.text()}`);
-  return new Uint8Array(await res.arrayBuffer());
-}
-
-// ── Step 2: Upload audio to Supabase Storage ─────────────────────────────────
-
-async function uploadAudio(bytes: Uint8Array, show: string, scriptId: string): Promise<string> {
-  const path = `ai-shows/${show}/${scriptId}.mp3`;
-  const { error } = await sb.storage
-    .from("newsletter-assets")
-    .upload(path, bytes, { contentType: "audio/mpeg", upsert: true });
-  if (error) throw new Error(`Audio upload: ${error.message}`);
-  return sb.storage.from("newsletter-assets").getPublicUrl(path).data.publicUrl;
-}
-
-// ── Step 3: HeyGen avatar video ───────────────────────────────────────────────
-
-async function submitHeyGen(scriptText: string, voiceId: string, avatarId: string, title: string): Promise<string> {
   const res = await fetch("https://api.heygen.com/v2/video/generate", {
     method: "POST",
-    headers: { "X-Api-Key": HEYGEN_KEY, "Content-Type": "application/json" },
+    headers: { "X-Api-Key": heygenKey, "Content-Type": "application/json" },
     body: JSON.stringify({
       video_inputs: [{
-        character: { type: "avatar", avatar_id: avatarId, avatar_style: "normal" },
-        voice:     { type: "text", input_text: scriptText, voice_id: voiceId },
-        background:{ type: "color", value: BG_COLOR },
+        character:  { type: "avatar", avatar_id: avatarId, avatar_style: "normal" },
+        voice:      { type: "text", input_text: text, voice_id: voiceId, speed: 1.0 },
+        background,
       }],
       dimension: { width: 1080, height: 1920 },
-      title,
+      title: title.slice(0, 80),
+      caption: false,
+      test: false,
     }),
   });
-  if (!res.ok) throw new Error(`HeyGen submit ${res.status}: ${await res.text()}`);
-  const { data } = await res.json();
-  return data.video_id as string;
+  const body = await res.text();
+  if (!res.ok) throw new Error(`HeyGen submit ${res.status}: ${body.slice(0, 400)}`);
+  const parsed = JSON.parse(body);
+  const videoId = parsed?.data?.video_id;
+  if (!videoId) throw new Error(`HeyGen no video_id: ${body.slice(0, 200)}`);
+  return videoId as string;
 }
-
-async function pollHeyGen(videoId: string): Promise<string> {
-  for (let i = 0; i < 72; i++) {          // max 12 min (72 × 10s)
-    await new Promise(r => setTimeout(r, 10_000));
-    const res = await fetch(`https://api.heygen.com/v1/video_status.get?video_id=${videoId}`, {
-      headers: { "X-Api-Key": HEYGEN_KEY },
-    });
-    const { data } = await res.json();
-    if (data?.status === "completed") return data.video_url as string;
-    if (data?.status === "failed")    throw new Error(`HeyGen failed: ${data.error}`);
-  }
-  throw new Error("HeyGen timed out after 12 minutes");
-}
-
-// ── Step 4: Store final video in Supabase ────────────────────────────────────
-
-async function storeVideo(videoUrl: string, show: string, scriptId: string): Promise<string> {
-  const bytes = new Uint8Array(await (await fetch(videoUrl)).arrayBuffer());
-  const path  = `ai-shows/${show}/${scriptId}.mp4`;
-  const { error } = await sb.storage
-    .from("newsletter-assets")
-    .upload(path, bytes, { contentType: "video/mp4", upsert: true });
-  if (error) throw new Error(`Video storage: ${error.message}`);
-  return sb.storage.from("newsletter-assets").getPublicUrl(path).data.publicUrl;
-}
-
-// ── Step 5: Socialblu auto-post ───────────────────────────────────────────────
-
-async function postSocialblu(storageUrl: string, showName: string, caption: string) {
-  const imgPlatforms = [SOCIALBLU.tiktok, SOCIALBLU.instagram, SOCIALBLU.pinterest];
-  const scheduledAt  = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // +1hr
-
-  for (const accountId of imgPlatforms) {
-    const res = await fetch("https://socialbu.com/api/v2/posts", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${SOCIALBLU_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        accounts: [accountId],
-        content: caption,
-        media_url: storageUrl,
-        status: "scheduled",
-        scheduled_at: scheduledAt,
-      }),
-    });
-    if (!res.ok) await logError(`Socialblu post failed acct ${accountId}`, await res.text());
-  }
-
-  // YouTube with title
-  await fetch("https://socialbu.com/api/v2/posts", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${SOCIALBLU_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      accounts: [SOCIALBLU.youtube],
-      title: `${showName.replace(/_/g, " ")} | NOVA Episode`,
-      content: caption,
-      media_url: storageUrl,
-      status: "scheduled",
-      scheduled_at: scheduledAt,
-    }),
-  });
-}
-
-// ── Main handler ──────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      },
-    })
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  let body: Record<string, string>;
+  try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
 
-  let scriptId: string, showName: string, voiceId: string, avatarId: string;
-  try {
-    ({ script_id: scriptId, show_name: showName, heygen_voice_id: voiceId, avatar_id: avatarId } = await req.json());
-  } catch {
-    return new Response("Invalid JSON", { 
-      status: 400,
-      headers: { "Access-Control-Allow-Origin": "*" }
-    });
-  }
+  const {
+    script_id: scriptId, show_name: showName,
+    heygen_voice_id: voiceId, avatar_id: avatarId,
+    background_url: bgUrl = ""
+  } = body;
 
   if (!scriptId || !showName || !voiceId || !avatarId) {
-    console.error(`[NOVA] Missing fields - scriptId: ${scriptId}, showName: ${showName}, voiceId: ${voiceId}, avatarId: ${avatarId}`);
-    return new Response("Missing required fields: script_id, show_name, heygen_voice_id, avatar_id", { 
-      status: 400,
-      headers: { "Access-Control-Allow-Origin": "*" }
-    });
+    return json({
+      error: "Missing required: script_id, show_name, heygen_voice_id, avatar_id",
+      received: { scriptId: !!scriptId, showName: !!showName, voiceId: !!voiceId, avatarId: !!avatarId }
+    }, 400);
   }
 
-  console.log(`[NOVA] Received - scriptId: ${scriptId}, showName: ${showName}, voiceId: ${voiceId}, avatarId: ${avatarId}`);
-
-  await slack(SLACK.deployments,
-    `🎙️ *NOVA starting* | Show: *${showName}* | Script: \`${scriptId.slice(0, 8)}…\``);
+  await slack(SLACK.nova, `🎙️ *NOVA producing* | ${showName} | \`${scriptId.slice(0, 8)}…\``);
 
   try {
-    console.log(`[NOVA] Starting production for script ${scriptId}`);
-    
-    // Fetch script
+    const heygenKey = await getHeyGenKey();
+
     const { data: script, error: sErr } = await sb
-      .from("show_scripts").select("script_text,caption").eq("id", scriptId).single();
-    if (sErr || !script) throw new Error(`Script not found: ${sErr?.message || 'unknown'}`);
-    console.log(`[NOVA] Script fetched: ${scriptId}`);
+      .from("show_scripts")
+      .select("script_text,caption,part_title,series_topic")
+      .eq("id", scriptId)
+      .single();
+    if (sErr || !script) throw new Error(`Script not found: ${sErr?.message || "unknown"}`);
+    const s = script as Record<string, string>;
 
-    // Step 1 — HeyGen video with built-in voice
-    console.log(`[NOVA] Submitting to HeyGen with voiceId: ${voiceId}, avatarId: ${avatarId}`);
-    await slack(SLACK.deployments, `🎬 Submitting to HeyGen avatar + voice pipeline…`);
-    const videoId      = await submitHeyGen(script.script_text, voiceId, avatarId, `${showName} — ${scriptId}`);
-    console.log(`[NOVA] HeyGen video submitted: ${videoId}`);
-    
-    const heygenUrl    = await pollHeyGen(videoId);
-    console.log(`[NOVA] HeyGen video completed: ${heygenUrl}`);
+    const episodeTitle = s.part_title || s.series_topic || showName;
+    const heygenTitle  = `${showName} — ${episodeTitle}`;
 
-    // Update episode with HeyGen URL
-    console.log(`[NOVA] Updating episode with URLs`);
-    await updateEpisode(scriptId, { heygen_video_url: heygenUrl });
+    // Upsert episode record — status=generating so nova-poll picks it up
+    const { data: existingEp } = await sb
+      .from("ai_episodes").select("id").eq("script_id", scriptId).maybeSingle();
 
-    // Step 2 — Store video
-    console.log(`[NOVA] Storing video in Supabase Storage`);
-    await slack(SLACK.deployments, `📦 Storing episode in Supabase Storage…`);
-    const storageUrl = await storeVideo(heygenUrl, showName, scriptId);
-    console.log(`[NOVA] Video stored: ${storageUrl}`);
+    if (existingEp) {
+      await sb.from("ai_episodes").update({
+        episode_title: episodeTitle, heygen_title: heygenTitle,
+        heygen_video_id: "", status: "generating", error_msg: ""
+      }).eq("script_id", scriptId);
+    } else {
+      await sb.from("ai_episodes").insert({
+        script_id: scriptId, show_name: showName,
+        episode_title: episodeTitle, heygen_title: heygenTitle,
+        heygen_video_id: "", status: "generating", source: "nova",
+      });
+    }
 
-    // Step 5 — Post
-    console.log(`[NOVA] Posting to Socialblu`);
-    await slack(SLACK.deployments, `📲 Scheduling posts via Socialblu…`);
-    await postSocialblu(storageUrl, showName, script.caption);
-    console.log(`[NOVA] Posted to Socialblu`);
+    await slack(SLACK.nova, `🎬 Submitting to HeyGen — ${heygenTitle.slice(0, 60)}`);
+    const videoId = await submitHeyGen(s.script_text, voiceId, avatarId, heygenTitle, bgUrl, heygenKey);
 
-    // Finalize
-    console.log(`[NOVA] Finalizing - marking as complete`);
-    await updateEpisode(scriptId, { storage_url: storageUrl, status: "complete" });
-    await updateScript(scriptId, "done");
+    // Set video ID — nova-poll polls every 2 min until completion
+    await sb.from("ai_episodes").update({ heygen_video_id: videoId }).eq("script_id", scriptId);
+    await sb.from("show_scripts").update({ status: "processing" }).eq("id", scriptId);
 
-    await slack(SLACK.salesLog,
-      `✅ *NOVA Episode Published* | ${showName}\n📹 ${storageUrl}`);
-    await slack(SLACK.deployments,
-      `✅ *NOVA complete* | *${showName}* episode live on TikTok · IG · YouTube · Pinterest`);
+    await slack(SLACK.nova,
+      `⏳ *HeyGen accepted* | video_id \`${videoId}\`\nnova-poll will detect completion and finalize.`);
 
-    console.log(`[NOVA] SUCCESS: Production complete for ${scriptId}`);
-    return new Response(JSON.stringify({ success: true, storage_url: storageUrl }), {
-      status: 200, 
-      headers: { 
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
-      },
+    return json({
+      success: true, video_id: videoId, script_id: scriptId,
+      show: showName, title: heygenTitle, status: "generating",
+      message: "HeyGen submitted. nova-poll will complete this episode automatically."
     });
 
   } catch (err) {
-    const errMsg = String(err);
-    console.error(`[NOVA] FAILED: ${errMsg}`);
-    console.error(`[NOVA] Error stack:`, err);
-    await logError(`Production failed | script ${scriptId} | ${errMsg}`, err);
-    await updateEpisode(scriptId, { status: "failed", error_msg: errMsg });
-    await updateScript(scriptId, "failed");
-    
-    const debugInfo = `Show: ${showName}\nScript: ${scriptId}\nVoice: ${voiceId}\nAvatar: ${avatarId}\nError: ${errMsg}`;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[nova v34]", errMsg);
+    await sb.from("ai_episodes")
+      .update({ status: "failed", error_msg: errMsg })
+      .eq("script_id", scriptId).catch(() => {});
+    await sb.from("show_scripts")
+      .update({ status: "ready" })
+      .eq("id", scriptId).catch(() => {});
     await slack(SLACK.escalations,
-      `🔴 *NOVA FAILED* | ${debugInfo}`);
-
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: errMsg,
-      debug: { scriptId, showName, voiceId, avatarId }
-    }), {
-      status: 500, 
-      headers: { 
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
-      },
-    });
+      `🔴 *NOVA ai-show-producer v34 FAILED*\nScript: \`${scriptId}\`\nShow: ${showName}\n\`${errMsg.slice(0, 400)}\``);
+    return json({ success: false, error: errMsg }, 500);
   }
 });
