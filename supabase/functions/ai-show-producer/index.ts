@@ -164,17 +164,35 @@ async function postSocialblu(storageUrl: string, showName: string, caption: stri
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    })
+  }
+
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   let scriptId: string, showName: string, voiceId: string, avatarId: string;
   try {
     ({ script_id: scriptId, show_name: showName, voice_id: voiceId, avatar_id: avatarId } = await req.json());
   } catch {
-    return new Response("Invalid JSON", { status: 400 });
+    return new Response("Invalid JSON", { 
+      status: 400,
+      headers: { "Access-Control-Allow-Origin": "*" }
+    });
   }
 
   if (!scriptId || !showName || !voiceId || !avatarId) {
-    return new Response("Missing required fields: script_id, show_name, voice_id, avatar_id", { status: 400 });
+    return new Response("Missing required fields: script_id, show_name, voice_id, avatar_id", { 
+      status: 400,
+      headers: { "Access-Control-Allow-Origin": "*" }
+    });
   }
 
   await slack(SLACK.deployments,
@@ -219,7 +237,11 @@ Deno.serve(async (req) => {
       `✅ *NOVA complete* | *${showName}* episode live on TikTok · IG · YouTube · Pinterest`);
 
     return new Response(JSON.stringify({ success: true, storage_url: storageUrl }), {
-      status: 200, headers: { "Content-Type": "application/json" },
+      status: 200, 
+      headers: { 
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*"
+      },
     });
 
   } catch (err) {
@@ -230,7 +252,11 @@ Deno.serve(async (req) => {
       `🔴 *NOVA FAILED* | show: ${showName} | script: ${scriptId}\n${String(err)}`);
 
     return new Response(JSON.stringify({ success: false, error: String(err) }), {
-      status: 500, headers: { "Content-Type": "application/json" },
+      status: 500, 
+      headers: { 
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*"
+      },
     });
   }
 });
