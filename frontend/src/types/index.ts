@@ -66,3 +66,129 @@ export interface ProducePayload {
   script_id: string; show_name: string; voice_id: string; avatar_id: string
   heygen_voice_id: string; show_color: string; background_url: string
 }
+
+// ============ NEW FEATURE: TRANSCRIPTION & AUDIO ============
+export interface AudioFile {
+  id: string
+  show_id: string
+  episode_id?: string
+  file_name: string
+  file_size: number
+  duration_seconds: number
+  s3_url: string
+  status: 'uploaded' | 'transcribing' | 'transcribed' | 'failed'
+  error_msg?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Transcript {
+  id: string
+  audio_id: string
+  episode_id?: string
+  full_text: string
+  segments: TranscriptSegment[]
+  language: string
+  word_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TranscriptSegment {
+  id?: string
+  start_time: number
+  end_time: number
+  text: string
+  speaker?: string
+  confidence: number
+}
+
+// ============ NEW FEATURE: CLIP GENERATION ============
+export interface VideoClip {
+  id: string
+  episode_id: string
+  title: string
+  start_time: number
+  end_time: number
+  transcript_segment_id?: string
+  status: 'pending' | 'generating' | 'ready' | 'failed'
+  video_url?: string
+  thumbnail_url?: string
+  virality_score?: number
+  key_moments?: string[]
+  captions?: string
+  error_msg?: string
+  created_at: string
+  updated_at: string
+}
+
+// ============ NEW FEATURE: ANALYTICS ============
+export interface EpisodeAnalytics {
+  id: string
+  episode_id: string
+  platform: string
+  views: number
+  likes: number
+  comments: number
+  shares: number
+  click_through_rate: number
+  watch_time_seconds: number
+  snapshot_date: string
+  created_at: string
+}
+
+export interface PerformanceMetrics {
+  episode_id: string
+  total_views: number
+  total_engagement: number
+  average_watch_time: number
+  virality_index: number
+  top_platform: string
+  best_posting_time: string
+}
+
+// ============ NEW FEATURE: AUDIT LOGGING ============
+export interface AuditLog {
+  id: string
+  show_id: string
+  user_id: string
+  action: 'create' | 'update' | 'delete' | 'approve' | 'publish' | 'archive'
+  entity_type: 'script' | 'episode' | 'clip' | 'show_config' | 'audio_file'
+  entity_id: string
+  before_state?: Record<string, unknown>
+  after_state?: Record<string, unknown>
+  ip_address: string
+  user_agent: string
+  created_at: string
+}
+
+// ============ VALIDATION & ERROR TYPES ============
+export interface ApiError {
+  code: string
+  message: string
+  details?: Record<string, unknown>
+  timestamp: string
+}
+
+export interface ValidationError {
+  field: string
+  message: string
+}
+
+// ============ RATE LIMITING ============
+export interface RateLimitConfig {
+  max_requests: number
+  window_ms: number
+  message?: string
+}
+
+// ============ FEATURE FLAGS ============
+export const FEATURE_FLAGS = {
+  AUDIO_UPLOAD: true,
+  TRANSCRIPTION: true,
+  CLIP_GENERATION: true,
+  ANALYTICS_DASHBOARD: true,
+  TEAM_COLLABORATION: false,
+  API_WEBHOOKS: false,
+  VOICE_CLONING: false,
+} as const
