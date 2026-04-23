@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Radio, FileText, Video, Settings, Brain, Mic, Camera, Send, Flame } from 'lucide-react'
+import { Radio, FileText, Video, Settings, Brain, Mic, Camera, Send } from 'lucide-react'
 import ChaNav from './ChaNav'
 import GuestNav from './GuestNav'
 
@@ -7,7 +7,6 @@ const nav = [
   { to: '/',          label: 'Dashboard', short: 'Dash',    icon: Radio    },
   { to: '/scripts',   label: 'Scripts',   short: 'Scripts', icon: FileText },
   { to: '/episodes',  label: 'Episodes',  short: 'Eps',     icon: Video    },
-  { to: '/audio-clips', label: 'Audio & Clips', short: 'Clips', icon: Flame },
   { to: '/scheduler', label: 'Scheduler', short: 'Sched',   icon: Send     },
   { to: '/studio',    label: 'Studio',    short: 'Studio',  icon: Brain    },
   { to: '/record',    label: 'Record',    short: 'Record',  icon: Camera   },

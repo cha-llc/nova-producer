@@ -5,7 +5,6 @@ import NovaHeader     from './components/NovaHeader'
 import Dashboard      from './pages/Dashboard'
 import Scripts        from './pages/Scripts'
 import Episodes       from './pages/Episodes'
-import AudioAndClips  from './pages/AudioAndClips'
 import Scheduler      from './pages/Scheduler'
 import AccountSettings from './pages/AccountSettings'
 import Settings       from './pages/Settings'
@@ -34,7 +33,6 @@ export default function App() {
                     <Route path="/"         element={<Dashboard />} />
                     <Route path="/scripts"  element={<Scripts />} />
                     <Route path="/episodes" element={<Episodes />} />
-                    <Route path="/audio-clips" element={<AudioAndClips />} />
                     <Route path="/scheduler" element={<Scheduler />} />
                     <Route path="/account"  element={<AccountSettings />} />
                     <Route path="/studio"   element={<Studio />} />
