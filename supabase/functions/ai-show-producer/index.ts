@@ -199,35 +199,52 @@ Deno.serve(async (req) => {
     `🎙️ *NOVA starting* | Show: *${showName}* | Script: \`${scriptId.slice(0, 8)}…\``);
 
   try {
+    console.log(`[NOVA] Starting production for script ${scriptId}`);
+    
     // Fetch script
     const { data: script, error: sErr } = await sb
       .from("show_scripts").select("script_text,caption").eq("id", scriptId).single();
-    if (sErr || !script) throw new Error("Script not found");
+    if (sErr || !script) throw new Error(`Script not found: ${sErr?.message || 'unknown'}`);
+    console.log(`[NOVA] Script fetched: ${scriptId}`);
 
     // Step 1 — Voice
+    console.log(`[NOVA] Starting ElevenLabs TTS with voiceId: ${voiceId}`);
     await slack(SLACK.deployments, `🎤 Generating voice via ElevenLabs…`);
     const audioBytes = await generateAudio(script.script_text, voiceId);
+    console.log(`[NOVA] Audio generated: ${audioBytes.length} bytes`);
 
     // Step 2 — Audio upload
+    console.log(`[NOVA] Uploading audio to Supabase Storage`);
     const audioUrl = await uploadAudio(audioBytes, showName, scriptId);
+    console.log(`[NOVA] Audio uploaded: ${audioUrl}`);
 
     // Step 3 — HeyGen video
+    console.log(`[NOVA] Submitting to HeyGen with avatarId: ${avatarId}`);
     await slack(SLACK.deployments, `🎬 Submitting to HeyGen avatar pipeline…`);
     const videoId      = await submitHeyGen(audioUrl, avatarId, `${showName} — ${scriptId}`);
+    console.log(`[NOVA] HeyGen video submitted: ${videoId}`);
+    
     const heygenUrl    = await pollHeyGen(videoId);
+    console.log(`[NOVA] HeyGen video completed: ${heygenUrl}`);
 
     // Update episode with audio URL
+    console.log(`[NOVA] Updating episode with URLs`);
     await updateEpisode(scriptId, { audio_url: audioUrl, heygen_video_url: heygenUrl });
 
     // Step 4 — Store video
+    console.log(`[NOVA] Storing video in Supabase Storage`);
     await slack(SLACK.deployments, `📦 Storing episode in Supabase Storage…`);
     const storageUrl = await storeVideo(heygenUrl, showName, scriptId);
+    console.log(`[NOVA] Video stored: ${storageUrl}`);
 
     // Step 5 — Post
+    console.log(`[NOVA] Posting to Socialblu`);
     await slack(SLACK.deployments, `📲 Scheduling posts via Socialblu…`);
     await postSocialblu(storageUrl, showName, script.caption);
+    console.log(`[NOVA] Posted to Socialblu`);
 
     // Finalize
+    console.log(`[NOVA] Finalizing - marking as complete`);
     await updateEpisode(scriptId, { storage_url: storageUrl, status: "complete" });
     await updateScript(scriptId, "done");
 
@@ -236,6 +253,7 @@ Deno.serve(async (req) => {
     await slack(SLACK.deployments,
       `✅ *NOVA complete* | *${showName}* episode live on TikTok · IG · YouTube · Pinterest`);
 
+    console.log(`[NOVA] SUCCESS: Production complete for ${scriptId}`);
     return new Response(JSON.stringify({ success: true, storage_url: storageUrl }), {
       status: 200, 
       headers: { 
@@ -245,13 +263,21 @@ Deno.serve(async (req) => {
     });
 
   } catch (err) {
-    await logError(`Production failed | script ${scriptId}`, err);
-    await updateEpisode(scriptId, { status: "failed", error_msg: String(err) });
+    const errMsg = String(err);
+    console.error(`[NOVA] FAILED: ${errMsg}`);
+    await logError(`Production failed | script ${scriptId} | ${errMsg}`, err);
+    await updateEpisode(scriptId, { status: "failed", error_msg: errMsg });
     await updateScript(scriptId, "failed");
+    
+    const debugInfo = `Show: ${showName}\nScript: ${scriptId}\nVoice: ${voiceId}\nAvatar: ${avatarId}\nError: ${errMsg}`;
     await slack(SLACK.escalations,
-      `🔴 *NOVA FAILED* | show: ${showName} | script: ${scriptId}\n${String(err)}`);
+      `🔴 *NOVA FAILED* | ${debugInfo}`);
 
-    return new Response(JSON.stringify({ success: false, error: String(err) }), {
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: errMsg,
+      debug: { scriptId, showName, voiceId, avatarId }
+    }), {
       status: 500, 
       headers: { 
         "Content-Type": "application/json",
