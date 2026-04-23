@@ -1137,4 +1137,4 @@ export default function Record() {
     </div>
     </GuestGate>
   )
-}
+}
