@@ -82,7 +82,7 @@ export default function Dashboard() {
     { label: 'Episodes Published', value: stats.complete_episodes,  color: '#2A9D8F', sub: `${stats.total_episodes} total` },
     { label: 'Scripts Ready',      value: stats.ready_scripts,      color: '#C9A84C', sub: `${stats.done_scripts} published` },
     { label: 'AI Content Sets',    value: stats.social_complete,    color: '#9B5DE5', sub: 'Studio outputs' },
-    { label: 'Voice Clones',       value: stats.voice_clones,       color: '#2A9D8F', sub: 'ElevenLabs clones' },
+    { label: 'Voice Clones',       value: stats.voice_clones,       color: '#2A9D8F', sub: 'HeyGen voices' },
   ]
 
   const quickLinks = [
@@ -114,7 +114,7 @@ export default function Dashboard() {
             { label: 'Episodes', sub: 'Your produced videos', color: '#2A9D8F' },
             { label: 'Scripts', sub: 'Your content queue', color: '#C9A84C' },
             { label: 'AI Content', sub: 'Studio outputs', color: '#9B5DE5' },
-            { label: 'Voice Clones', sub: 'ElevenLabs clones', color: '#2A9D8F' },
+            { label: 'Voice Clones', sub: 'HeyGen voices', color: '#2A9D8F' },
           ].map(({ label, sub, color }) => (
             <div key={label} className="nova-card flex flex-col gap-2 opacity-50">
               <div className="flex items-center gap-2">
@@ -155,7 +155,7 @@ export default function Dashboard() {
           </div>
           <h1 className="font-display text-4xl text-white tracking-wide">NOVA v2</h1>
           <p className="text-sm font-mono text-nova-muted mt-1">
-            Claude + fal.ai + Canva + HeyGen + ElevenLabs + Socialblu — all in one pipeline
+            Claude + HeyGen + Socialblu + Canva — all in one pipeline
           </p>
         </div>
         <button onClick={load} disabled={loading}

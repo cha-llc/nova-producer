@@ -1,266 +1,206 @@
 import GuestGate from '../components/GuestGate'
-import { useEffect, useState } from 'react'
-import { Send, Check, AlertCircle, Clock, TrendingUp, RefreshCw } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { Send, Check, AlertCircle, Clock, RefreshCw, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-type PostStatus = 'pending' | 'processing' | 'sent' | 'failed'
+type PostStatus = 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled'
 
 interface QueuePost {
-  id: string
-  episode_id: string | null
-  episode_title: string
-  show_name: string
-  account_ids: number[]
-  scheduled_at: string
-  status: PostStatus
-  hook: string
-  caption: string
-  cta: string
-  hashtags: string[]
-  video_url: string
-  error_msg: string | null
-  socialblu_post_ids: unknown[]
-  sent_at: string | null
-  created_at: string
+  id: string; episode_id: string | null; episode_title: string; show_name: string
+  account_ids: number[]; scheduled_at: string; status: PostStatus
+  hook: string; caption: string; cta: string; hashtags: string[]
+  video_url: string; error_msg: string | null; socialblu_post_ids: unknown[]
+  sent_at: string | null; created_at: string
 }
 
-const platformNames: { [key: number]: string } = {
-  165296: 'TikTok',
-  165297: 'Instagram',
-  165298: 'YouTube',
-  177489: 'Pinterest',
-  177779: 'Reddit',
-  177890: 'Twitter',
-  177891: 'LinkedIn',
+const PLATFORMS: Record<number, { name: string; emoji: string }> = {
+  165296: { name: 'TikTok',     emoji: '🎬' },
+  165297: { name: 'Instagram',  emoji: '📸' },
+  165298: { name: 'YouTube',    emoji: '▶️' },
+  177489: { name: 'Pinterest',  emoji: '📌' },
+  177779: { name: 'Reddit',     emoji: '👽' },
+  177890: { name: 'X',          emoji: '𝕏'  },
+  177891: { name: 'LinkedIn',   emoji: '💼' },
 }
 
-const platformEmojis: { [key: number]: string } = {
-  165296: '🎬',
-  165297: '📸',
-  165298: '▶️',
-  177489: '📌',
-  177779: '👽',
-  177890: '𝕏',
-  177891: '💼',
-}
-
-function getStatusColor(status: PostStatus) {
-  switch (status) {
-    case 'sent':
-      return 'bg-teal-500/10 border-teal-500/30 text-teal-400'
-    case 'pending':
-      return 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-    case 'processing':
-      return 'bg-blue-500/10 border-blue-500/30 text-blue-400'
-    case 'failed':
-      return 'bg-red-500/10 border-red-500/30 text-red-400'
-    default:
-      return 'bg-gray-500/10 border-gray-500/30 text-gray-400'
-  }
-}
-
-function getStatusIcon(status: PostStatus) {
-  switch (status) {
-    case 'sent':
-      return <Check size={14} />
-    case 'pending':
-      return <Clock size={14} />
-    case 'processing':
-      return <RefreshCw size={14} className="animate-spin" />
-    case 'failed':
-      return <AlertCircle size={14} />
-    default:
-      return null
-  }
+const STATUS_STYLE: Record<string, string> = {
+  sent:       'bg-nova-teal/10 border-nova-teal/30 text-nova-teal',
+  pending:    'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
+  processing: 'bg-blue-500/10  border-blue-500/30  text-blue-400',
+  failed:     'bg-red-500/10   border-red-500/30   text-red-400',
+  cancelled:  'bg-nova-border/50 border-nova-border text-nova-muted',
 }
 
 export default function Scheduler() {
-  const [posts, setPosts] = useState<QueuePost[]>([])
+  const [posts, setPosts]   = useState<QueuePost[]>([])
   const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState({ sent: 0, pending: 0, failed: 0 })
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchPosts()
-    const interval = setInterval(fetchPosts, 10000) // Refresh every 10s
-    return () => clearInterval(interval)
-  }, [])
-
-  async function fetchPosts() {
+  const load = useCallback(async () => {
+    setLoading(true)
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('nova_post_queue')
         .select('*')
         .order('scheduled_at', { ascending: false })
-        .limit(50)
+        .limit(80)
+      setPosts((data ?? []) as QueuePost[])
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }, [])
 
-      if (error) throw error
+  useEffect(() => {
+    load()
+    const t = setInterval(load, 15000)
+    return () => clearInterval(t)
+  }, [load])
 
-      setPosts(data || [])
-
-      // Calculate stats
-      const statData = data?.reduce(
-        (acc, post) => {
-          if (post.status === 'sent') acc.sent++
-          else if (post.status === 'pending') acc.pending++
-          else if (post.status === 'failed') acc.failed++
-          return acc
-        },
-        { sent: 0, pending: 0, failed: 0 }
-      ) || { sent: 0, pending: 0, failed: 0 }
-
-      setStats(statData)
-    } catch (err) {
-      console.error('Failed to fetch posts:', err)
-    } finally {
-      setLoading(false)
-    }
+  const deletePost = async (id: string) => {
+    setDeleting(id)
+    setConfirmDelete(null)
+    await supabase.from('nova_post_queue').delete().eq('id', id)
+    setPosts(prev => prev.filter(p => p.id !== id))
+    setDeleting(null)
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-nova-gold" />
-          <p className="text-nova-muted text-sm">Loading scheduler...</p>
-        </div>
-      </div>
-    )
-  }
+  const stats = posts.reduce(
+    (acc, p) => {
+      if (p.status === 'sent')    acc.sent++
+      if (p.status === 'pending') acc.pending++
+      if (p.status === 'failed')  acc.failed++
+      return acc
+    },
+    { sent: 0, pending: 0, failed: 0 }
+  )
 
   return (
     <GuestGate pageName="Scheduler">
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-display text-white mb-1">📤 Post Scheduler</h1>
-          <p className="text-nova-muted text-sm">
-            Track scheduled and sent posts via Socialblu MCP
-          </p>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-2 h-2 rounded-full bg-nova-teal animate-pulse-slow" />
+            <span className="text-xs font-mono text-nova-muted uppercase tracking-widest">Post Scheduler</span>
+          </div>
+          <h1 className="font-display text-3xl text-white tracking-wide">POST SCHEDULER</h1>
+          <p className="text-sm font-mono text-nova-muted mt-0.5">Track and manage queued posts via Socialblu</p>
         </div>
-        <button
-          onClick={fetchPosts}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-nova-gold/10 hover:bg-nova-gold/20 text-nova-gold border border-nova-gold/30 transition-all text-sm font-body"
-        >
-          <RefreshCw size={14} />
+        <button onClick={load} disabled={loading}
+          className="nova-btn-ghost flex items-center gap-2 text-sm disabled:opacity-50">
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-nova-border/30 border border-nova-border/50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-nova-muted text-xs font-mono uppercase">Sent</span>
-            <Check size={16} className="text-teal-400" />
-          </div>
-          <p className="text-2xl font-display text-teal-400">{stats.sent}</p>
-        </div>
-
-        <div className="bg-nova-border/30 border border-nova-border/50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-nova-muted text-xs font-mono uppercase">Pending</span>
-            <Clock size={16} className="text-yellow-400" />
-          </div>
-          <p className="text-2xl font-display text-yellow-400">{stats.pending}</p>
-        </div>
-
-        <div className="bg-nova-border/30 border border-nova-border/50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-nova-muted text-xs font-mono uppercase">Failed</span>
-            <AlertCircle size={16} className="text-red-400" />
-          </div>
-          <p className="text-2xl font-display text-red-400">{stats.failed}</p>
-        </div>
-      </div>
-
-      {/* Posts List */}
-      <div className="space-y-3">
-        {posts.length === 0 ? (
-          <div className="text-center py-12 bg-nova-border/20 border border-nova-border/30 rounded-lg">
-            <Send size={24} className="mx-auto mb-2 text-nova-muted opacity-50" />
-            <p className="text-nova-muted text-sm">No posts yet</p>
-          </div>
-        ) : (
-          posts.map((post) => (
-            <div
-              key={post.id}
-              className="bg-nova-border/20 border border-nova-border/30 rounded-lg p-4 hover:border-nova-border/50 transition-all"
-            >
-              {/* Post Header */}
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="font-body font-medium text-white text-sm mb-1">
-                    {post.episode_title}
-                  </h3>
-                  <p className="text-nova-muted text-xs">
-                    📺 {post.show_name.replace(/_/g, ' ').toUpperCase()} · 🕐{' '}
-                    {new Date(post.scheduled_at).toLocaleString()}
-                  </p>
-                </div>
-
-                {/* Status Badge */}
-                <div
-                  className={`px-2 py-1 rounded-md border text-xs font-mono flex items-center gap-1 ${getStatusColor(
-                    post.status
-                  )}`}
-                >
-                  {getStatusIcon(post.status)}
-                  {post.status.toUpperCase()}
-                </div>
-              </div>
-
-              {/* Post Content Preview */}
-              {post.hook && (
-                <p className="text-white text-sm mb-3 line-clamp-2">
-                  <span className="text-nova-gold font-semibold">Hook:</span> {post.hook}
-                </p>
-              )}
-
-              {/* Platforms */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                {post.account_ids.map((id) => (
-                  <span
-                    key={id}
-                    className="px-2 py-1 rounded-md bg-nova-border/40 text-nova-muted text-xs font-mono flex items-center gap-1"
-                  >
-                    {platformEmojis[id]} {platformNames[id]}
-                  </span>
-                ))}
-              </div>
-
-              {/* Error Message */}
-              {post.error_msg && (
-                <div className="text-red-300/70 text-xs bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
-                  ⚠️ {post.error_msg}
-                </div>
-              )}
-
-              {/* Meta */}
-              <div className="text-nova-muted text-xs font-mono mt-3 pt-3 border-t border-nova-border/30">
-                {post.sent_at && (
-                  <p>✓ Sent {new Date(post.sent_at).toLocaleString()}</p>
-                )}
-                {post.status === 'sent' && post.socialblu_post_ids && (
-                  <p>
-                    📤 Socialblu Posts: {JSON.stringify(post.socialblu_post_ids).length > 2 ? `${Array.isArray(post.socialblu_post_ids) ? post.socialblu_post_ids.length : 1}` : 'pending'}
-                  </p>
-                )}
-              </div>
+        {[
+          { label: 'SENT',    count: stats.sent,    icon: <Check size={15}/>,        cls: 'text-nova-teal' },
+          { label: 'PENDING', count: stats.pending, icon: <Clock size={15}/>,        cls: 'text-yellow-400' },
+          { label: 'FAILED',  count: stats.failed,  icon: <AlertCircle size={15}/>,  cls: 'text-red-400' },
+        ].map(s => (
+          <div key={s.label} className="nova-card flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-nova-muted uppercase tracking-widest">{s.label}</span>
+              <span className={s.cls}>{s.icon}</span>
             </div>
-          ))
-        )}
+            <p className={`text-3xl font-display ${s.cls}`}>{s.count}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Info Box */}
-      <div className="bg-nova-gold/5 border border-nova-gold/20 rounded-lg p-4">
-        <p className="text-nova-muted text-xs leading-relaxed">
-          <TrendingUp size={14} className="inline mr-2" />
-          <strong>How it works:</strong> Posts are scheduled via schedule-episode, queued in nova_post_queue, and
-          processed by nova-queue-processor every 5 minutes. Claude processes via Socialblu MCP to fire posts to all 7
-          platforms. Weekly summary sent to #cj-directives on Sundays.
-        </p>
-      </div>
+      {/* Posts */}
+      {loading && posts.length === 0 ? (
+        <div className="flex items-center justify-center py-16">
+          <RefreshCw size={20} className="animate-spin text-nova-gold" />
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="nova-card text-center py-16">
+          <Send size={20} className="mx-auto mb-3 text-nova-muted opacity-40" />
+          <p className="text-sm font-mono text-nova-muted">No posts in queue</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {posts.map(post => {
+            const isConfirming = confirmDelete === post.id
+            const isDeleting   = deleting === post.id
+            const canDelete    = ['pending', 'failed', 'cancelled'].includes(post.status)
+
+            return (
+              <div key={post.id} className="nova-card group">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-body font-semibold text-white truncate">{post.episode_title || post.show_name}</p>
+                    <p className="text-[11px] font-mono text-nova-muted mt-0.5">
+                      📺 {post.show_name.replace(/_/g, ' ').toUpperCase()} · 🕐 {new Date(post.scheduled_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Status badge */}
+                    <span className={`px-2 py-1 rounded border text-[10px] font-mono flex items-center gap-1 ${STATUS_STYLE[post.status] ?? STATUS_STYLE.cancelled}`}>
+                      {post.status === 'sent'       && <Check size={10} />}
+                      {post.status === 'pending'    && <Clock size={10} />}
+                      {post.status === 'processing' && <RefreshCw size={10} className="animate-spin" />}
+                      {post.status === 'failed'     && <AlertCircle size={10} />}
+                      {post.status.toUpperCase()}
+                    </span>
+                    {/* Delete */}
+                    {canDelete && !isConfirming && !isDeleting && (
+                      <button onClick={() => setConfirmDelete(post.id)}
+                        className="nova-btn-ghost p-1.5 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                    {isDeleting && <RefreshCw size={13} className="animate-spin text-nova-muted" />}
+                    {isConfirming && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono text-red-400">Delete?</span>
+                        <button onClick={() => deletePost(post.id)}
+                          className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30">Yes</button>
+                        <button onClick={() => setConfirmDelete(null)}
+                          className="nova-btn-ghost p-0.5"><X size={11}/></button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Hook */}
+                {post.hook && post.hook.length > 1 && (
+                  <p className="text-sm text-white mt-2 leading-relaxed">
+                    <span className="text-nova-gold font-semibold text-xs mr-1">Hook:</span>{post.hook}
+                  </p>
+                )}
+
+                {/* Platforms */}
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {(post.account_ids ?? []).map(id => (
+                    <span key={id} className="px-1.5 py-0.5 rounded bg-nova-border/40 text-nova-muted text-[10px] font-mono">
+                      {PLATFORMS[id]?.emoji} {PLATFORMS[id]?.name ?? id}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Error */}
+                {post.error_msg && (
+                  <div className="mt-2 text-[11px] font-mono text-red-300/70 bg-red-500/10 border border-red-500/20 rounded px-2 py-1">
+                    ⚠️ {post.error_msg}
+                  </div>
+                )}
+
+                {/* Sent meta */}
+                {post.sent_at && (
+                  <p className="text-[10px] font-mono text-nova-muted mt-2 pt-2 border-t border-nova-border/30">
+                    ✓ Sent {new Date(post.sent_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
     </GuestGate>
   )

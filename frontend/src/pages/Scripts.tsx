@@ -1,4 +1,5 @@
 import GuestGate from '../components/GuestGate'
+import NovaIdeaModal from '../components/NovaIdeaModal'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Loader2, RefreshCw, ChevronDown, ChevronUp,
@@ -74,6 +75,7 @@ export default function Scripts() {
   const [form, setForm]             = useState({ ...EMPTY_FORM })
   const [createError, setCreateError] = useState('')
   const [platformPicker, setPlatformPicker] = useState<string | null>(null)
+  const [showIdea, setShowIdea] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -266,6 +268,12 @@ export default function Scripts() {
           <p className="text-xs font-mono text-nova-muted mt-0.5">{scripts.length} total</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* NOVA Idea Generator */}
+          <button onClick={() => setShowIdea(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-body font-semibold text-white hover:brightness-110 transition-all"
+            style={{ background: 'linear-gradient(135deg, #9B5DE5, #C9A84C)' }}>
+            <Sparkles size={14} /> Give NOVA an Idea
+          </button>
           <button onClick={() => setShowCreate(v => !v)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl bg-nova-gold text-nova-navy text-sm font-body hover:brightness-110 transition-all">
             <Plus size={14} /> Create Script
@@ -276,6 +284,8 @@ export default function Scripts() {
         </div>
       </div>
 
+      {/* NOVA Idea Modal */}
+      {showIdea && <NovaIdeaModal onClose={() => setShowIdea(false)} onCreated={load} />}
       {/* Create form */}
       {showCreate && (
         <div className="nova-card border border-nova-gold/30 space-y-4">
