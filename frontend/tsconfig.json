@@ -16,7 +16,6 @@
     "noImplicitAny": false,
     "strictNullChecks": false,
     "noFallthroughCasesInSwitch": true,
-    "ignoreDeprecations": "6.0",
     
     "baseUrl": ".",
     "paths": {
