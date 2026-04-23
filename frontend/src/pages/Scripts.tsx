@@ -11,7 +11,7 @@ type Script = {
   series_week_start: string | null; part_title: string; script_text: string
   caption: string; status: string; post_date: string | null; post_time_utc: string
 }
-type ShowInfo = { id: string; show_name: string; display_name: string; color: string; avatar_id: string; voice_id: string }
+type ShowInfo = { id: string; show_name: string; display_name: string; color: string; avatar_id: string; heygen_voice_id: string; background_url: string }
 type SocialContent = { script_id: string; hook: string; caption: string; cta: string; hashtags: string[]; status: string }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -67,7 +67,7 @@ export default function Scripts() {
         .select('id,show_id,series_topic,series_part,series_week_start,part_title,script_text,caption,status,post_date,post_time_utc')
         .order('status', { ascending: true })
         .order('post_date', { ascending: true }),
-      supabase.from('show_configs').select('id,show_name,display_name,color,avatar_id,voice_id').order('display_name'),
+      supabase.from('show_configs').select('id,show_name,display_name,color,avatar_id,heygen_voice_id,background_url').order('display_name'),
     ])
     if (scriptError) {
       console.error('Script load error:', scriptError)
@@ -165,7 +165,7 @@ export default function Scripts() {
         body: JSON.stringify({
           script_id: script.id,
           show_name: show.show_name,
-          voice_id: show.voice_id,
+          voice_id: show.heygen_voice_id,
           avatar_id: show.avatar_id,
         }),
         signal: controller.signal,
