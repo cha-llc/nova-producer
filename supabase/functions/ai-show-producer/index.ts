@@ -199,25 +199,44 @@ Deno.serve(async (req) => {
     `🎙️ *NOVA starting* | Show: *${showName}* | Script: \`${scriptId.slice(0, 8)}…\``);
 
   try {
-    // Simple approach: Just queue the job for async processing
-    // The full pipeline (ElevenLabs, HeyGen, etc.) can run separately
-    
+    // Fetch script
     const { data: script, error: sErr } = await sb
-      .from("show_scripts").select("id,script_text,caption").eq("id", scriptId).single();
+      .from("show_scripts").select("script_text,caption").eq("id", scriptId).single();
     if (sErr || !script) throw new Error("Script not found");
 
-    // Mark as queued
-    await updateEpisode(scriptId, { status: "queued" });
-    await updateScript(scriptId, "queued");
-    
-    await slack(SLACK.deployments, 
-      `✅ *NOVA Queued* | Show: *${showName}* | Script: \`${scriptId.slice(0, 8)}…\` - ready for production`);
+    // Step 1 — Voice
+    await slack(SLACK.deployments, `🎤 Generating voice via ElevenLabs…`);
+    const audioBytes = await generateAudio(script.script_text, voiceId);
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      queued: true,
-      message: "Queued for production - will be processed by background worker"
-    }), {
+    // Step 2 — Audio upload
+    const audioUrl = await uploadAudio(audioBytes, showName, scriptId);
+
+    // Step 3 — HeyGen video
+    await slack(SLACK.deployments, `🎬 Submitting to HeyGen avatar pipeline…`);
+    const videoId      = await submitHeyGen(audioUrl, avatarId, `${showName} — ${scriptId}`);
+    const heygenUrl    = await pollHeyGen(videoId);
+
+    // Update episode with audio URL
+    await updateEpisode(scriptId, { audio_url: audioUrl, heygen_video_url: heygenUrl });
+
+    // Step 4 — Store video
+    await slack(SLACK.deployments, `📦 Storing episode in Supabase Storage…`);
+    const storageUrl = await storeVideo(heygenUrl, showName, scriptId);
+
+    // Step 5 — Post
+    await slack(SLACK.deployments, `📲 Scheduling posts via Socialblu…`);
+    await postSocialblu(storageUrl, showName, script.caption);
+
+    // Finalize
+    await updateEpisode(scriptId, { storage_url: storageUrl, status: "complete" });
+    await updateScript(scriptId, "done");
+
+    await slack(SLACK.salesLog,
+      `✅ *NOVA Episode Published* | ${showName}\n📹 ${storageUrl}`);
+    await slack(SLACK.deployments,
+      `✅ *NOVA complete* | *${showName}* episode live on TikTok · IG · YouTube · Pinterest`);
+
+    return new Response(JSON.stringify({ success: true, storage_url: storageUrl }), {
       status: 200, 
       headers: { 
         "Content-Type": "application/json",
