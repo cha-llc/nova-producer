@@ -162,15 +162,9 @@ export default function Settings() {
                       </div>
                       <div>
                         <label className="block text-xs font-mono text-nova-muted mb-1">HeyGen Voice ID</label>
-                        <input value={getConfig(show, 'heygen_voice_id')}
-                          onChange={e => updateConfig(show.show_name, 'heygen_voice_id', e.target.value)}
+                        <input value={getConfig(show, 'voice_id')}
+                          onChange={e => updateConfig(show.show_name, 'voice_id', e.target.value)}
                           className="nova-input w-full" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-mono text-nova-muted mb-1">Background URL</label>
-                        <input value={getConfig(show, 'background_url')}
-                          onChange={e => updateConfig(show.show_name, 'background_url', e.target.value)}
-                          className="nova-input w-full" placeholder="https://... or blank for solid color" />
                       </div>
                       <div>
                         <label className="block text-xs font-mono text-nova-muted mb-1">Brand Color</label>
