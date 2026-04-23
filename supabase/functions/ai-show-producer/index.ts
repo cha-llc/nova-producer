@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
 
   let scriptId: string, showName: string, voiceId: string, avatarId: string;
   try {
-    ({ script_id: scriptId, show_name: showName, voice_id: voiceId, avatar_id: avatarId } = await req.json());
+    ({ script_id: scriptId, show_name: showName, heygen_voice_id: voiceId, avatar_id: avatarId } = await req.json());
   } catch {
     return new Response("Invalid JSON", { 
       status: 400,
@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
 
   if (!scriptId || !showName || !voiceId || !avatarId) {
     console.error(`[NOVA] Missing fields - scriptId: ${scriptId}, showName: ${showName}, voiceId: ${voiceId}, avatarId: ${avatarId}`);
-    return new Response("Missing required fields: script_id, show_name, voice_id, avatar_id", { 
+    return new Response("Missing required fields: script_id, show_name, heygen_voice_id, avatar_id", { 
       status: 400,
       headers: { "Access-Control-Allow-Origin": "*" }
     });
