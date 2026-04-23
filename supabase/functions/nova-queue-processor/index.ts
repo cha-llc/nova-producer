@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     const textContent = (claudeData.content || []).find((b: Record<string, unknown>) => b.type === 'text');
 
     const postIds = (duePosts as Record<string, unknown>[]).map(p => String(p.id));
-    await sb.from('nova_post_queue').update({ status: 'sent', sent_at: new Date().toISOString() }).in('id', postIds).catch(() => {});
+    await sb.from('nova_post_queue').update({ status: 'sent', sent_at: new Date().toISOString() }).in('id', postIds);
 
     for (const post of duePosts as Record<string, unknown>[]) {
       const acctIds = (post.account_ids as number[]) ?? [];
