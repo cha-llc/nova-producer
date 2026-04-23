@@ -62,12 +62,18 @@ export default function Scripts() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: sc }, { data: sh }] = await Promise.all([
+    const [{ data: sc, error: scriptError }, { data: sh }] = await Promise.all([
       supabase.from('show_scripts')
         .select('id,show_id,series_topic,series_part,series_week_start,part_title,script_text,caption,status,post_date,post_time_utc')
-        .order('status', { ascending: true }).order('post_date', { ascending: true }).order('series_part', { ascending: true }),
+        .order('status', { ascending: true })
+        .order('post_date', { ascending: true }),
       supabase.from('show_configs').select('id,show_name,display_name,color,avatar_id,heygen_voice_id,voice_id,background_url').order('display_name'),
     ])
+    if (scriptError) {
+      console.error('Script load error:', scriptError)
+      setLoading(false)
+      return
+    }
     const scripts = sc ?? []
     setScripts(scripts as Script[])
     setShows(sh ?? [])
