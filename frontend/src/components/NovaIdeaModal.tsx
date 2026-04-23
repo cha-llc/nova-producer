@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Wand2, Sparkles, X, Loader2, Check } from 'lucide-react'
+import { Wand2, Sparkles, X, Loader2, Check, Tv2, Megaphone } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 interface ShowConfig { id: string; show_name: string; display_name: string; color: string }
@@ -14,8 +14,9 @@ const PLATFORMS = [
   { id: 'reddit',    label: 'Reddit',    emoji: '🤖' },
 ] as const
 type PlatformId = typeof PLATFORMS[number]['id']
+type ContentType = 'episode' | 'commercial'
 
-// Show auto-selection heuristic
+// Silent show picker — NOVA decides, user never sees this
 function pickShow(idea: string, shows: ShowConfig[]): ShowConfig | null {
   const lower = idea.toLowerCase()
   const map: [string[], string][] = [
@@ -25,9 +26,7 @@ function pickShow(idea: string, shows: ShowConfig[]): ShowConfig | null {
     [['relationship','boundary','love','partner','friend','family','communicate','tea','sip','trust','loyal','alone'], 'tea_time_with_cj'],
   ]
   for (const [kws, name] of map) {
-    if (kws.some(k => lower.includes(k))) {
-      return shows.find(s => s.show_name === name) ?? null
-    }
+    if (kws.some(k => lower.includes(k))) return shows.find(s => s.show_name === name) ?? null
   }
   return shows.find(s => s.show_name === 'tea_time_with_cj') ?? shows[0] ?? null
 }
@@ -35,47 +34,42 @@ function pickShow(idea: string, shows: ShowConfig[]): ShowConfig | null {
 interface Props { onClose: () => void; onCreated: () => void }
 
 export default function NovaIdeaModal({ onClose, onCreated }: Props) {
-  const [idea, setIdea]       = useState('')
-  const [platform, setPlatform] = useState<PlatformId>('youtube')
-  const [shows, setShows]     = useState<ShowConfig[]>([])
-  const [pickedShow, setPickedShow] = useState<ShowConfig | null>(null)
-  const [overrideShow, setOverrideShow] = useState<string | null>(null)
+  const [idea, setIdea]             = useState('')
+  const [platform, setPlatform]     = useState<PlatformId>('youtube')
+  const [contentType, setContentType] = useState<ContentType>('episode')
+  const [shows, setShows]           = useState<ShowConfig[]>([])
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone]       = useState(false)
-  const [error, setError]     = useState('')
+  const [done, setDone]             = useState(false)
+  const [error, setError]           = useState('')
   const textRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    supabase.from('show_configs').select('id,show_name,display_name,color').then(({ data }) => {
-      setShows((data ?? []) as ShowConfig[])
-    })
+    supabase.from('show_configs').select('id,show_name,display_name,color')
+      .then(({ data }) => setShows((data ?? []) as ShowConfig[]))
     textRef.current?.focus()
   }, [])
 
-  useEffect(() => {
-    if (!idea.trim() || shows.length === 0) { setPickedShow(null); return }
-    const s = overrideShow
-      ? shows.find(s => s.id === overrideShow) ?? null
-      : pickShow(idea, shows)
-    setPickedShow(s)
-  }, [idea, shows, overrideShow])
-
-  const activeShow = pickedShow ?? shows[0] ?? null
-
   const submit = async () => {
     if (!idea.trim()) { setError('Enter an idea first'); return }
-    if (!activeShow)  { setError('No show configured'); return }
     setSubmitting(true); setError('')
     try {
+      // NOVA silently picks the show for episodes; commercials use first show as anchor
+      const pickedShow = contentType === 'episode'
+        ? pickShow(idea, shows)
+        : (shows[0] ?? null)
+
+      if (!pickedShow) { setError('No show configured'); setSubmitting(false); return }
+
       const { error: insertErr } = await supabase.from('show_scripts').insert({
-        show_id:            activeShow.id,
-        part_title:         idea.trim(),
-        series_topic:       idea.trim(),
-        series_part:        null,
-        script_text:        '',
-        caption:            '',
-        status:             'scripting',
+        show_id:              pickedShow.id,
+        part_title:           idea.trim(),
+        series_topic:         contentType === 'commercial' ? 'CHA Commercial' : idea.trim(),
+        series_part:          null,
+        script_text:          '',
+        caption:              '',
+        status:               'scripting',
         platform,
+        content_type:         contentType,
         scripting_started_at: new Date().toISOString(),
       })
       if (insertErr) throw insertErr
@@ -86,6 +80,12 @@ export default function NovaIdeaModal({ onClose, onCreated }: Props) {
     }
     setSubmitting(false)
   }
+
+  const isCommercial = contentType === 'commercial'
+  const btnLabel = isCommercial ? 'Generate Commercial' : 'Generate Episode'
+  const subLabel = isCommercial
+    ? 'NOVA writes a 30–60 sec ad script with hook, pitch & CTA'
+    : 'NOVA writes the full 30-min episode script'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -99,57 +99,71 @@ export default function NovaIdeaModal({ onClose, onCreated }: Props) {
             </div>
             <div>
               <p className="text-sm font-body font-semibold text-white">NOVA Idea Generator</p>
-              <p className="text-[10px] font-mono text-nova-muted">Give NOVA an idea → full episode script</p>
+              <p className="text-[10px] font-mono text-nova-muted">Give NOVA an idea → full script</p>
             </div>
           </div>
           <button onClick={onClose} className="nova-btn-ghost p-1.5"><X size={15}/></button>
         </div>
 
         <div className="p-5 space-y-4">
+
+          {/* Content type toggle */}
+          <div>
+            <label className="text-[10px] font-mono text-nova-muted uppercase tracking-widest block mb-2">
+              What are you creating?
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { type: 'episode'    as ContentType, icon: <Tv2 size={14}/>,       label: 'Episode',    sub: '30-min show script' },
+                { type: 'commercial' as ContentType, icon: <Megaphone size={14}/>, label: 'Commercial', sub: '30–60 sec ad' },
+              ] as const).map(opt => (
+                <button
+                  key={opt.type}
+                  onClick={() => setContentType(opt.type)}
+                  className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all ${
+                    contentType === opt.type
+                      ? 'border-nova-gold/40 bg-nova-gold/10'
+                      : 'border-nova-border/40 hover:border-nova-border'
+                  }`}
+                >
+                  <span className={contentType === opt.type ? 'text-nova-gold' : 'text-nova-muted'}>
+                    {opt.icon}
+                  </span>
+                  <div>
+                    <p className={`text-xs font-body font-semibold ${contentType === opt.type ? 'text-white' : 'text-nova-muted'}`}>
+                      {opt.label}
+                    </p>
+                    <p className="text-[10px] font-mono text-nova-muted">{opt.sub}</p>
+                  </div>
+                  {contentType === opt.type && (
+                    <Check size={12} className="ml-auto text-nova-gold flex-shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Idea input */}
           <div>
             <label className="text-[10px] font-mono text-nova-muted uppercase tracking-widest block mb-1.5">
-              Your Idea / Topic
+              {isCommercial ? 'Product / Concept to Promote' : 'Your Idea / Topic'}
             </label>
             <textarea
               ref={textRef}
               value={idea}
               onChange={e => setIdea(e.target.value)}
-              placeholder="e.g. People who stay in relationships out of fear instead of love..."
+              placeholder={isCommercial
+                ? 'e.g. BrandPulse — AI brand audit that gives you a 12-page report...'
+                : 'e.g. People who stay in relationships out of fear instead of love...'}
               rows={3}
               className="w-full bg-nova-surface border border-nova-border rounded-lg px-3 py-2.5 text-sm font-body text-white placeholder-nova-muted focus:outline-none focus:border-nova-gold/40 resize-none"
             />
+            {!isCommercial && (
+              <p className="text-[10px] font-mono text-nova-muted mt-1">
+                NOVA automatically selects the best show for your idea
+              </p>
+            )}
           </div>
-
-          {/* Show auto-picked */}
-          {shows.length > 0 && (
-            <div>
-              <label className="text-[10px] font-mono text-nova-muted uppercase tracking-widest block mb-1.5">
-                Show {overrideShow ? '(override)' : '(NOVA picks based on your idea)'}
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {shows.map(s => {
-                  const isActive = activeShow?.id === s.id
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => setOverrideShow(overrideShow === s.id ? null : s.id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-mono text-left transition-all ${
-                        isActive
-                          ? 'border-nova-gold/40 bg-nova-gold/10 text-white'
-                          : 'border-nova-border/40 text-nova-muted hover:border-nova-border'
-                      }`}
-                    >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                      <span className="truncate">{s.display_name}</span>
-                      {isActive && !overrideShow && <span className="ml-auto text-[9px] text-nova-gold">AUTO</span>}
-                      {isActive && overrideShow && <Check size={10} className="ml-auto text-nova-gold" />}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Platform */}
           <div>
@@ -188,15 +202,13 @@ export default function NovaIdeaModal({ onClose, onCreated }: Props) {
             style={{ background: done ? '#2A9D8F' : 'linear-gradient(135deg, #C9A84C, #9B5DE5)' }}
           >
             {done
-              ? <><Check size={15}/> Script Queued — NOVA is writing it</>
+              ? <><Check size={15}/> Queued — NOVA is writing it</>
               : submitting
-              ? <><Loader2 size={15} className="animate-spin"/> Queuing script...</>
-              : <><Wand2 size={15}/> Generate {activeShow ? `for ${activeShow.display_name}` : 'Episode'}</>
+              ? <><Loader2 size={15} className="animate-spin"/> Queuing...</>
+              : <><Wand2 size={15}/> {btnLabel}</>
             }
           </button>
-          <p className="text-[10px] font-mono text-nova-muted text-center">
-            NOVA will write the full 30-min script • Check Scripts tab for status
-          </p>
+          <p className="text-[10px] font-mono text-nova-muted text-center">{subLabel} • Check Scripts tab for status</p>
         </div>
       </div>
     </div>
