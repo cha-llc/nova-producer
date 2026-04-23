@@ -189,11 +189,14 @@ Deno.serve(async (req) => {
   }
 
   if (!scriptId || !showName || !voiceId || !avatarId) {
+    console.error(`[NOVA] Missing fields - scriptId: ${scriptId}, showName: ${showName}, voiceId: ${voiceId}, avatarId: ${avatarId}`);
     return new Response("Missing required fields: script_id, show_name, voice_id, avatar_id", { 
       status: 400,
       headers: { "Access-Control-Allow-Origin": "*" }
     });
   }
+
+  console.log(`[NOVA] Received - scriptId: ${scriptId}, showName: ${showName}, voiceId: ${voiceId}, avatarId: ${avatarId}`);
 
   await slack(SLACK.deployments,
     `🎙️ *NOVA starting* | Show: *${showName}* | Script: \`${scriptId.slice(0, 8)}…\``);
@@ -265,6 +268,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     const errMsg = String(err);
     console.error(`[NOVA] FAILED: ${errMsg}`);
+    console.error(`[NOVA] Error stack:`, err);
     await logError(`Production failed | script ${scriptId} | ${errMsg}`, err);
     await updateEpisode(scriptId, { status: "failed", error_msg: errMsg });
     await updateScript(scriptId, "failed");
