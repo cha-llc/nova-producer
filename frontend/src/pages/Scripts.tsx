@@ -172,7 +172,7 @@ export default function Scripts() {
       const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
       
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
+      const timeout = setTimeout(() => controller.abort(), 90000) // 90s — HeyGen submit can take time
       
       const r = await fetch(`${SUPABASE_URL}/functions/v1/ai-show-producer`, {
         method: 'POST',
@@ -181,10 +181,12 @@ export default function Scripts() {
           'Authorization': `Bearer ${SUPABASE_KEY}`,
         },
         body: JSON.stringify({
-          script_id: script.id,
-          show_name: show.show_name,
-          voice_id: show.heygen_voice_id,
-          avatar_id: show.avatar_id,
+          script_id:       script.id,
+          show_name:       show.show_name,
+          heygen_voice_id: show.heygen_voice_id,
+          voice_id:        show.heygen_voice_id,
+          avatar_id:       show.avatar_id,
+          background_url:  (show as Record<string,string>).background_url || '',
         }),
         signal: controller.signal,
       })
@@ -192,12 +194,13 @@ export default function Scripts() {
       clearTimeout(timeout)
       
       if (!r.ok) {
-        throw new Error(`Edge Function error: ${r.status} ${r.statusText}`)
+        const errBody = await r.json().catch(() => ({ error: r.statusText }))
+        throw new Error((errBody as Record<string,string>).error || `Server error ${r.status}`)
       }
       
       const d = await r.json()
       if (d.success) {
-        setProduceMsg(p => ({ ...p, [script.id]: 'Submitted to HeyGen ✓' }))
+        setProduceMsg(p => ({ ...p, [script.id]: '✓ Submitted to HeyGen — rendering now' }))
       } else if (d.queued) {
         setProduceMsg(p => ({ ...p, [script.id]: 'Queued — avatar busy, will auto-produce' }))
       } else if (d.skipped) {
